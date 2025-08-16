@@ -82,9 +82,8 @@ jobs:
   # --- FINAL JOB: Create the Release ---
   create-release:
     name: Create GitHub Release
-    if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release') && (needs.build-desktop.result == 'success' || needs.build-raspberry-pi.result == 'success' || needs.build-android.result == 'success')
     needs: [build-desktop, build-raspberry-pi, build-android]
-    if: always() && (needs.build-desktop.result == 'success' || needs.build-raspberry-pi.result == 'success' || needs.build-android.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
