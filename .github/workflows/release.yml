@@ -140,7 +140,8 @@ jobs:
       APPLE_CERT_PRESENT: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
       
     # 2. The 'if' condition now checks the environment variable.
-    if: startsWith(github.event.head_commit.message, 'Release') && env.APPLE_CERT_PRESENT == 'true'
+    if: false
+    # if: startsWith(github.event.head_commit.message, 'Release') && env.APPLE_CERT_PRESENT == 'true'
     
     runs-on: macos-latest
     steps:
