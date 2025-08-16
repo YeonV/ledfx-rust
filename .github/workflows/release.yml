@@ -171,7 +171,6 @@ jobs:
   # --- FINAL JOB: Create the Release ---
   create-release:
     name: Create GitHub Release
-    if: startsWith(github.event.head_commit.message, 'Release')
     needs: [build-desktop, build-android, build-raspberry-pi, build-ios]
     # This ensures the release job runs even if optional builds (like iOS) are skipped
     if: always() && (needs.build-desktop.result == 'success' || needs.build-android.result == 'success' || needs.gpr-build.result == 'success')
