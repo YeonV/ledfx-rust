@@ -12,10 +12,9 @@ jobs:
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ${{ matrix.platform }}
     strategy:
-      fail-fast: false # <-- THE FIX: Don't cancel other jobs if one fails
+      fail-fast: false
       matrix:
         platform: [macos-latest, ubuntu-22.04, windows-latest]
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -134,8 +133,15 @@ jobs:
   # --- JOB 4: Build for iOS ---
   build-ios:
     name: Build iOS IPA
-    # --- THE FIX: Only run this job if the secrets are present ---
-    if: startsWith(github.event.head_commit.message, 'Release') && secrets.APPLE_CERTIFICATE_BASE64 != ''
+    
+    # --- THE DEFINITIVE FIX ---
+    # 1. Define an environment variable for the job based on the secret's presence.
+    env:
+      APPLE_CERT_PRESENT: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+      
+    # 2. The 'if' condition now checks the environment variable.
+    if: startsWith(github.event.head_commit.message, 'Release') && env.APPLE_CERT_PRESENT == 'true'
+    
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -165,17 +171,37 @@ jobs:
   # --- FINAL JOB: Create the Release ---
   create-release:
     name: Create GitHub Release
-    # This job now only needs the desktop and rpi builds to succeed
-    needs: [build-desktop, build-raspberry-pi] # Add build-android and build-ios back when they are stable
+    if: startsWith(github.event.head_commit.message, 'Release')
+    needs: [build-desktop, build-android, build-raspberry-pi, build-ios]
+    # This ensures the release job runs even if optional builds (like iOS) are skipped
+    if: always() && (needs.build-desktop.result == 'success' || needs.build-android.result == 'success' || needs.gpr-build.result == 'success')
+
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # ... (Release creation steps are unchanged)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Get Version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Generate Changelog File
+        id: generate_changelog_file
+        run: |
+          echo "## Changes in v${{ steps.get_version.outputs.VERSION }}" > changelog.md
+          git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%h))" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> changelog.md
+          echo "Changelog generated:"
+          cat changelog.md
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          # ...
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          body_path: changelog.md
           files: |
             artifacts/desktop-artifacts-windows-latest/*
             artifacts/desktop-artifacts-macos-latest/*
