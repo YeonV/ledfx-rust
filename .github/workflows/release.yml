@@ -30,13 +30,16 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
         run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to Tauri Conf
+      
+      # --- THE DEFINITIVE FIX: Sync Version using jq ---
+      - name: Sync Version to tauri.conf.json
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          yarn tauri icon ../src/assets/icon.png
-          yarn tauri info --version "$VERSION"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          jq --argjson version "\"$PACKAGE_VERSION\"" '.package.version = $version' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+      
       - name: Build the application
         run: yarn tauri build
+        
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -72,24 +75,20 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
         run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to Tauri Conf
+      - name: Sync Version to tauri.conf.json
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          yarn tauri icon ../src/assets/icon.png
-          yarn tauri info --version "$VERSION"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          jq --argjson version "\"$PACKAGE_VERSION\"" '.package.version = $version' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
       - name: Initialize Tauri Android project
         run: yarn tauri android init
         env:
           ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Build Android APK
         run: |
-          # --- THE FIX: Unset the conflicting variable ---
           unset ANDROID_SDK_ROOT
           yarn tauri android build
         env:
           ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -104,37 +103,34 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      
-      # --- THE FIX: Use a dedicated cross-compilation action ---
-      - name: Set up cross-compilation environment
-        uses: cross-rs/cross@v0.2.5
-        with:
-          target: aarch64-unknown-linux-gnu
-
-      - name: Install frontend dependencies
+        
+      - name: Install frontend dependencies (Yarn)
         run: yarn install --frozen-lockfile
-      - name: Install Tauri CLI
-        run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to Tauri Conf
+        
+      - name: Sync Version to tauri.conf.json
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          yarn tauri icon ../src/assets/icon.png
-          yarn tauri info --version "$VERSION"
-      - name: Build the application for ARM64 using cross
-        # 'cross' transparently replaces 'cargo'
-        run: yarn tauri build --runner cross
+          sudo apt-get update && sudo apt-get install -y jq
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          jq --argjson version "\"$PACKAGE_VERSION\"" '.package.version = $version' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+          
+      # --- THE DEFINITIVE FIX: Use the official Tauri Action ---
+      - name: Build Raspberry Pi AppImage using Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        with:
+          # This tells the action which target to build for.
+          # It handles all the complex cross-compilation setup internally.
+          target: aarch64-unknown-linux-gnu
+          
       - name: Upload AppImage Artifact
         uses: actions/upload-artifact@v4
         with:
           name: rpi-artifact
-          path: src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          path: "**/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage"
 
   # --- JOB 4: Build for iOS (Skipped) ---
   build-ios:
     name: Build iOS IPA (Skipped)
-    if: false # <-- THE FIX: Hard-disable this job for now
+    if: false
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -173,6 +169,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Get Version from package.json
         id: get_version
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
@@ -185,18 +183,12 @@ jobs:
         run: |
           echo "## Changes in v${{ steps.get_version.outputs.VERSION }}" > changelog.md
           git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%h))" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> changelog.md
-          echo "Changelog generated:"
-          cat changelog.md
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.VERSION }}
           name: Release v${{ steps.get_version.outputs.VERSION }}
           body_path: changelog.md
+          # This will upload any artifacts that were successfully created
           files: |
-            artifacts/desktop-artifacts-windows-latest/*
-            artifacts/desktop-artifacts-macos-latest/*
-            artifacts/desktop-artifacts-ubuntu-22.04/*
-            artifacts/rpi-artifact/*
-            # artifacts/android-artifact/*
-            # artifacts/ios-artifact/*
+            artifacts/**/*
