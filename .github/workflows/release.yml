@@ -23,26 +23,26 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # This is the definitive list of dependencies required for a Tauri build on Ubuntu
+      # --- THE DEFINITIVE FIX for Ubuntu ---
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.x"
-          cache: "yarn"
-
-      - name: Install frontend dependencies
+      - name: Install frontend dependencies (Yarn)
         run: yarn install --frozen-lockfile
 
       - name: Install Tauri CLI
         run: yarn add -D @tauri-apps/cli
 
-      # This is the definitive, cross-platform version sync using Node.js
       - name: Sync Version to tauri.conf.json
         shell: bash
         run: |
@@ -53,7 +53,6 @@ jobs:
             const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
-            console.log(`Synced version to ${packageJson.version} in tauri.conf.json`);
           "
 
       - name: Build the application
@@ -85,11 +84,11 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r25b
+      
+      # --- THE DEFINITIVE FIX for Android ---
+      - name: Setup full Android SDK environment
+        uses: android-actions/setup-android@v3
+
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
@@ -107,16 +106,8 @@ jobs:
           "
       - name: Initialize Tauri Android project
         run: yarn tauri android init
-        env:
-          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Build Android APK
-        run: |
-          unset ANDROID_SDK_ROOT
-          yarn tauri android build
-        env:
-          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: yarn tauri android build
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -133,13 +124,28 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.x"
-          cache: "yarn"
+      - name: Install cross-compilation tool
+        uses: taiki-e/install-action@cross
+      
+      # --- THE DEFINITIVE FIX for RPi ---
+      - name: Install ARM64 system dependencies
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev:arm64 \
+            libgtk-3-dev:arm64 \
+            libappindicator3-dev:arm64 \
+            librsvg2-dev:arm64 \
+            libsoup-3.0-dev:arm64 \
+            libjavascriptcoregtk-4.1-dev:arm64 \
+            libgirepository1.0-dev:arm64 \
+            libglib2.0-dev:arm64
+
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
       - name: Sync Version to tauri.conf.json
         shell: bash
         run: |
@@ -151,17 +157,15 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
-      - name: Build Raspberry Pi AppImage using Tauri Action
-        uses: tauri-apps/tauri-action@v0
-        with:
-          target: aarch64-unknown-linux-gnu
-          
+      - name: Build the application for ARM64 using cross
+        run: cd src-tauri && cross build --release --target aarch64-unknown-linux-gnu
+      - name: Manually bundle with Tauri CLI
+        run: yarn tauri build --bundles appimage --target aarch64-unknown-linux-gnu
       - name: Upload AppImage Artifact
         uses: actions/upload-artifact@v4
         with:
           name: rpi-artifact
-          # The tauri-action places artifacts in a specific folder structure
-          path: artifacts/ledfx-rust_*_arm64.AppImage.tar.gz
+          path: src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
 
   # --- JOB 4: Build for iOS (Skipped) ---
   build-ios:
