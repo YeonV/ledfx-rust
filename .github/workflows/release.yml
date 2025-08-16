@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- JOB 1: Build for Desktop (Windows, macOS, Linux) ---
-  build-desktop:
-    name: Build Desktop - ${{ matrix.platform }}
+  # --- This is the ONLY build job. It uses the official Tauri Action. ---
+  build-tauri:
+    name: Build - ${{ matrix.platform }}
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ${{ matrix.platform }}
     strategy:
@@ -19,83 +19,31 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
-      - name: Install frontend dependencies (Yarn)
-        run: yarn install --frozen-lockfile
-      - name: Install Tauri CLI
-        run: yarn add -D @tauri-apps/cli
-      
-      # --- THE DEFINITIVE FIX: Sync Version using jq ---
-      - name: Sync Version to tauri.conf.json
-        run: |
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          jq --argjson version "\"$PACKAGE_VERSION\"" '.package.version = $version' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
-      
-      - name: Build the application
-        run: yarn tauri build
-        
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-artifacts-${{ matrix.platform }}
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/dmg/*.dmg
 
-  # --- JOB 2: Build for Android ---
-  build-android:
-    name: Build Android APK
-    if: startsWith(github.event.head_commit.message, 'Release')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: "yarn"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Add Android targets
-        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r25b
+
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
-      - name: Install Tauri CLI
-        run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to tauri.conf.json
-        run: |
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          jq --argjson version "\"$PACKAGE_VERSION\"" '.package.version = $version' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
-      - name: Initialize Tauri Android project
-        run: yarn tauri android init
-        env:
-          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      - name: Build Android APK
-        run: |
-          unset ANDROID_SDK_ROOT
-          yarn tauri android build
-        env:
-          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-artifact
-          path: src-tauri/gen/android/app/build/outputs/apk/release/*.apk
 
-  # --- JOB 3: Build for Raspberry Pi (ARM Linux) ---
+      # --- THE DEFINITIVE FIX: Use the official Tauri Action for ALL builds ---
+      - name: Build Application using Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # The action will automatically detect the platform (macOS, Linux, Windows)
+          # and build the correct distributable (.dmg, .AppImage, .msi).
+          # It also handles installing Linux dependencies for us.
+          distPath: ../dist # This is a common requirement for the action
+          
+  # --- JOB for Raspberry Pi (This still needs a separate setup) ---
   build-raspberry-pi:
     name: Build Raspberry Pi (ARM64)
     if: startsWith(github.event.head_commit.message, 'Release')
@@ -103,66 +51,40 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
-      - name: Install frontend dependencies (Yarn)
+      - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
-        
-      - name: Sync Version to tauri.conf.json
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          jq --argjson version "\"$PACKAGE_VERSION\"" '.package.version = $version' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
-          
-      # --- THE DEFINITIVE FIX: Use the official Tauri Action ---
       - name: Build Raspberry Pi AppImage using Tauri Action
         uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # This tells the action which target to build for.
-          # It handles all the complex cross-compilation setup internally.
           target: aarch64-unknown-linux-gnu
-          
-      - name: Upload AppImage Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rpi-artifact
-          path: "**/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage"
+          distPath: ../dist
 
-  # --- JOB 4: Build for iOS (Skipped) ---
-  build-ios:
-    name: Build iOS IPA (Skipped)
-    if: false
-    runs-on: macos-latest
+  # --- JOB for Android ---
+  build-android:
+    name: Build Android APK
+    if: startsWith(github.event.head_commit.message, 'Release')
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Add iOS targets
-        run: rustup target add aarch64-apple-ios x86_64-apple-ios
-      - name: Install frontend dependencies (Yarn)
+      - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
-      - name: Install Tauri CLI
-        run: yarn add -D @tauri-apps/cli
-      - name: Install Apple certificate and provisioning profile
-        # TODO: This is the complex part. You need to add your certs/profiles as secrets.
-        uses: apple-actions/import-codesign-certs@v3
+      - name: Build Android APK using Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      - name: Build iOS App
-        run: yarn tauri ios build
-      - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-artifact
-          path: src-tauri/gen/apple/build/release/*.ipa
+          args: --target aarch64-linux-android # Example for 64-bit ARM
+          distPath: ../dist
 
   # --- FINAL JOB: Create the Release ---
   create-release:
     name: Create GitHub Release
-    if: startsWith(github.event.head_commit.message, 'Release') && (needs.build-desktop.result == 'success' || needs.build-android.result == 'success' || needs.build-raspberry-pi.result == 'success')
-    needs: [build-desktop, build-android, build-raspberry-pi, build-ios]
-    
+    if: startsWith(github.event.head_commit.message, 'Release')
+    needs: [build-desktop, build-raspberry-pi, build-android]
+    if: always() && (needs.build-desktop.result == 'success' || needs.build-raspberry-pi.result == 'success' || needs.build-android.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
