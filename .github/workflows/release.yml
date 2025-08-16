@@ -1,0 +1,163 @@
+name: Universal Cross-Platform Release
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  # --- JOB 1: Build for Desktop (Windows, macOS, Linux) ---
+  build-desktop:
+    name: Build Desktop - ${{ matrix.platform }}
+    if: startsWith(github.event.head_commit.message, 'Release')
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies (Yarn)
+        run: yarn install --frozen-lockfile
+
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+
+      - name: Build the application
+        # This one command handles everything: building the Rust backend,
+        # building the React frontend, and bundling them into a native installer.
+        run: yarn tauri build
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-artifacts
+          # The path to the final installer/app bundle is different for each OS
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/dmg/*.dmg
+
+  # --- JOB 2: Build for Android ---
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Add Android targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+      - name: Setup Java (for Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Install frontend dependencies (Yarn)
+        run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Build Android APK
+        # Tauri's mobile command handles the complexity of calling Gradle
+        run: yarn tauri android build
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-artifact
+          path: src-tauri/gen/android/app/build/outputs/apk/release/*.apk
+
+  # --- JOB 3: Build for Raspberry Pi (ARM Linux) ---
+  build-raspberry-pi:
+    name: Build Raspberry Pi (ARM64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cross-compilation tools for ARM64 Linux
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: aarch64-unknown-linux-gnu
+      - name: Install frontend dependencies (Yarn)
+        run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Build the application for ARM64
+        run: yarn tauri build --target aarch64-unknown-linux-gnu
+      - name: Upload AppImage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpi-artifact
+          path: src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+
+  # --- JOB 4: Build for iOS ---
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Add iOS targets
+        run: rustup target add aarch64-apple-ios x86_64-apple-ios
+      - name: Install frontend dependencies (Yarn)
+        run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Install Apple certificate and provisioning profile
+        # TODO: This is the complex part. You need to add your certs/profiles as secrets.
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Build iOS App
+        run: yarn tauri ios build
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-artifact
+          path: src-tauri/gen/apple/build/release/*.ipa
+
+  # --- FINAL JOB: Create the Release ---
+  create-release:
+    name: Create GitHub Release
+    needs: [build-desktop, build-android, build-raspberry-pi, build-ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create a release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Get Version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Generate Changelog File
+        id: generate_changelog_file
+        run: |
+          echo "## Changes in v${{ steps.get_version.outputs.VERSION }}" > changelog.md
+          git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%h))" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> changelog.md
+          echo "Changelog generated:"
+          cat changelog.md
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          body_path: changelog.md
+          files: |
+            artifacts/desktop-artifacts/*
+            artifacts/android-artifact/*
+            artifacts/rpi-artifact/*
+            artifacts/ios-artifact/*
