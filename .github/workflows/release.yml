@@ -194,13 +194,14 @@ jobs:
           const tauriConfPath = './src-tauri/tauri.conf.json';
           let tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
           
-          // Ensure the android and signing objects exist
-          tauriConf.android = tauriConf.android || {};
-          tauriConf.android.signing = tauriConf.android.signing || {};
+          // Ensure the nested structure exists
+          tauriConf.bundle = tauriConf.bundle || {};
+          tauriConf.bundle.android = tauriConf.bundle.android || {};
+          tauriConf.bundle.android.signing = tauriConf.bundle.android.signing || {};
           
-          // Set the signing configuration
-          tauriConf.android.signing.keyPath = `${process.env.RUNNER_TEMP}/ledfx-rust-release-key.jks`;
-          tauriConf.android.signing.keyAlias = 'androiddebugkey';
+          // Set the signing configuration in the correct location
+          tauriConf.bundle.android.signing.keyPath = `${process.env.RUNNER_TEMP}/ledfx-rust-release-key.jks`;
+          tauriConf.bundle.android.signing.keyAlias = 'androiddebugkey';
           
           fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           console.log('Successfully configured Android signing in tauri.conf.json');
