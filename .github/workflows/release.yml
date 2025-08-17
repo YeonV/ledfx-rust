@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- JOB 1: Build for Desktop (UNTOUCHED) ---
+  # --- JOB 1: Build for Desktop ---
   build-desktop:
     name: Build Desktop - ${{ matrix.platform }}
     if: false
@@ -63,7 +63,8 @@ jobs:
   # --- RASPBERRY PI BUILD ---
   build-rpi-native:
     name: Build RPi (Native ARM Runner)
-    if: startsWith(github.event.head_commit.message, 'Release')
+    if: false
+    # if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
@@ -102,52 +103,10 @@ jobs:
           name: rpi-native-artifact
           path: src-tauri/target/release/bundle/appimage/*.AppImage
 
-  # --- ANDROID BUILDS ---
-  build-android-a:
-    name: Build Android (Modern Action)
-    if: true
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with: { distribution: "temurin", java-version: "17" }
-      - name: Install Rust toolchain with Android targets
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-      - name: Setup Android SDK and NDK
-        uses: android-actions/setup-android@v3
-      - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
-      - name: Install Tauri CLI
-        run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to tauri.conf.json
-        shell: bash
-        run: |
-          node -e "
-            const fs = require('fs');
-            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const tauriConfPath = './src-tauri/tauri.conf.json';
-            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
-            tauriConf.version = packageJson.version;
-            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
-          "
-      - name: Initialize and Build Android project
-        run: |
-          yarn tauri android init
-          yarn tauri android build
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-artifact-a
-          path: src-tauri/gen/android/app/build/outputs/apk/release/*.apk
-
-  build-android-b:
+  # --- ANDROID BUILD ---
+  build-android:
     name: Build Android (nttld Action)
-    if: true
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -191,12 +150,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-artifact-b
-          path: src-tauri/gen/android/app/build/outputs/apk/release/*.apk
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
 
   # --- JOB 4: Build for iOS ---
   build-ios:
     name: Build iOS IPA (Skipped)
     if: false
+    # if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -228,7 +190,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     if: always() && startsWith(github.event.head_commit.message, 'Release')
-    needs: [build-desktop, build-rpi-native, build-android-a, build-android-b]
+    needs: [build-desktop, build-rpi-native, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
