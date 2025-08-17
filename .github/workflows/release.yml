@@ -43,7 +43,8 @@ jobs:
             patchelf \
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev \
-            webkit2gtk-4.1
+            webkit2gtk-4.1 \
+            libasound2-dev
       - name: Install frontend dependencies (Yarn)
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
@@ -104,7 +105,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            xdg-utils
+            xdg-utils \
+            libasound2-dev 
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI

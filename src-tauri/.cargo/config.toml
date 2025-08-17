@@ -1,0 +1,21 @@
+# src-tauri/.cargo/config.toml
+
+# Configuration for the aarch64-linux-android target (64-bit ARM phones)
+[target.aarch64-linux-android]
+linker = "aarch64-linux-android24-clang"
+ar = "aarch64-linux-android-ar"
+
+# Configuration for the armv7-linux-androideabi target (32-bit ARM phones)
+[target.armv7-linux-androideabi]
+linker = "armv7a-linux-androideabi24-clang"
+ar = "armv7a-linux-androideabi-ar"
+
+# Configuration for the i686-linux-android target (32-bit x86 emulators/devices)
+[target.i686-linux-android]
+linker = "i686-linux-android24-clang"
+ar = "i686-linux-android-ar"
+
+# Configuration for the x86_64-linux-android target (64-bit x86 emulators/devices)
+[target.x86_64-linux-android]
+linker = "x86_64-linux-android24-clang"
+ar = "x86_64-linux-android-ar"
