@@ -9,7 +9,8 @@ import type { WledDevice, AudioDevice } from '../bindings';
 import {
   Box, Grid, LinearProgress, Stack, TextField, Alert, Slider, Typography,
   Card, CardHeader, FormControl, InputLabel, Select, MenuItem,
-  CardContent
+  CardContent,
+  SelectChangeEvent
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 import SearchIcon from '@mui/icons-material/Search';
@@ -24,12 +25,16 @@ export function WledDiscoverer() {
   const [selectedEffects, setSelectedEffects] = useState<Record<string, string>>({});
   const [targetFps, setTargetFps] = useState(60);
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
 
-  useEffect(() => {
-    // --- THE FIX: Handle the Result type ---
+useEffect(() => {
     commands.getAudioDevices().then(result => {
       if (result.status === 'ok') {
         setAudioDevices(result.data);
+        // Set the default device to the first one in the list
+        if (result.data.length > 0) {
+          setSelectedAudioDevice(result.data[0].name);
+        }
       } else {
         console.error(result.error);
       }
@@ -42,12 +47,20 @@ export function WledDiscoverer() {
     return () => { unlistenPromise.then(unlisten => unlisten()); };
   }, []);
 
+
   useEffect(() => {
     const handler = setTimeout(() => {
       commands.setTargetFps(targetFps).catch(console.error);
     }, 500);
     return () => clearTimeout(handler);
   }, [targetFps]);
+
+  const handleAudioDeviceChange = (event: SelectChangeEvent<string>) => {
+    const deviceName = event.target.value;
+    setSelectedAudioDevice(deviceName);
+    commands.setAudioDevice(deviceName).catch(console.error);
+  };
+
 
   const handleDiscover = async () => {
     setIsScanning(true);
@@ -119,16 +132,20 @@ export function WledDiscoverer() {
         />
       </Box>
 
-      <Card variant="outlined" sx={{ mb: 2 }}>
+        <Card variant="outlined" sx={{ mb: 2 }}>
         <CardHeader
           avatar={<SettingsIcon />}
           title="Audio Settings"
-          subheader="Select your audio input device"
+          subheader="Select your audio input device (Restart required)"
         />
         <CardContent>
           <FormControl fullWidth size="small">
             <InputLabel>Audio Device</InputLabel>
-            <Select label="Audio Device" value={audioDevices[0]?.name || ''}>
+            <Select
+              label="Audio Device"
+              value={selectedAudioDevice}
+              onChange={handleAudioDeviceChange}
+            >
               {audioDevices.map((device) => (
                 <MenuItem key={device.name} value={device.name}>
                   {device.name}

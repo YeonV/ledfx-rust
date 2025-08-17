@@ -5,7 +5,7 @@ use crate::audio::SharedAudioData;
 use crate::utils::send_ddp_packet;
 use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
-use std::sync::{mpsc};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{State, AppHandle, Emitter};
@@ -20,7 +20,6 @@ pub enum EngineCommand {
     StopEffect { ip_address: String },
     Subscribe { ip_address: String },
     Unsubscribe { ip_address: String },
-    // --- THE FIX: Change the type here to u32 ---
     SetTargetFps { fps: u32 },
 }
 
@@ -61,14 +60,13 @@ pub fn run_effect_engine(
                 EngineCommand::Unsubscribe { ip_address } => { subscribed_ips.remove(&ip_address); }
                 EngineCommand::SetTargetFps { fps } => {
                     if fps > 0 {
-                        // --- THE FIX: Cast the u32 to u64 for the Duration function ---
-                        target_frame_duration = Duration::from_millis(fps as u64);
+                        target_frame_duration = Duration::from_millis(1000 / fps as u64);
                     }
                 }
             }
         }
 
-        let latest_audio_data = audio_data.0.lock().unwrap().clone();
+        let latest_audio_data = audio_data.inner().0.lock().unwrap().clone();
         frame_count = frame_count.wrapping_add(1);
 
         for (ip, active_effect) in &mut active_effects {
@@ -122,9 +120,7 @@ pub fn unsubscribe_from_frames(ip_address: String, command_tx: State<mpsc::Sende
 
 #[tauri::command]
 #[specta::specta]
-// --- THE FIX: The input is u32 ---
 pub fn set_target_fps(fps: u32, command_tx: State<mpsc::Sender<EngineCommand>>) -> Result<(), String> {
-    // --- THE FIX: The command now sends a u32, no cast needed ---
     command_tx.send(EngineCommand::SetTargetFps { fps }).unwrap();
     Ok(())
 }

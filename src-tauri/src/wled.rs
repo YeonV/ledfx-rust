@@ -40,10 +40,8 @@ pub struct WledDevice {
 
 #[tauri::command]
 #[specta::specta]
-// --- THE FIX: Change u64 to u32 ---
 pub async fn discover_wled(app_handle: AppHandle, duration_secs: Option<u32>) -> Result<(), String> {
     const WLED_SERVICE_TYPE: &str = "_wled._tcp.local.";
-    // --- THE FIX: Cast the u32 to u64 for the Duration function ---
     let search_duration = Duration::from_secs(duration_secs.unwrap_or(10) as u64);
     let mdns = ServiceDaemon::new().map_err(|e| e.to_string())?;
     let receiver = mdns.browse(WLED_SERVICE_TYPE).map_err(|e| e.to_string())?;
