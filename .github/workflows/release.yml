@@ -187,30 +187,18 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
-      - name: Configure Signing in tauri.conf.json
+      - name: Initialize Android project
+        run: yarn tauri android init
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Create Keystore Properties File
         run: |
-          cat << 'EOF' > configure-signing.cjs
-          const fs = require('fs');
-          const tauriConfPath = './src-tauri/tauri.conf.json';
-          let tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
-          
-          // Ensure the nested structure exists
-          tauriConf.bundle = tauriConf.bundle || {};
-          tauriConf.bundle.android = tauriConf.bundle.android || {};
-          tauriConf.bundle.android.signing = tauriConf.bundle.android.signing || {};
-          
-          // Set the signing configuration in the correct location
-          tauriConf.bundle.android.signing.keyPath = `${process.env.RUNNER_TEMP}/ledfx-rust-release-key.jks`;
-          tauriConf.bundle.android.signing.keyAlias = 'androiddebugkey';
-          
-          fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
-          console.log('Successfully configured Android signing in tauri.conf.json');
-          EOF
-          node configure-signing.cjs
+          echo "storeFile=$RUNNER_TEMP/ledfx-rust-release-key.jks" > src-tauri/gen/android/keystore.properties
+          echo "password=android" >> src-tauri/gen/android/keystore.properties
+          echo "keyAlias=androiddebugkey" >> src-tauri/gen/android/keystore.properties
       - name: Build Signed Android Project
-        run: |
-          yarn tauri android init
-          yarn tauri android build
+        run: yarn tauri android build
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
