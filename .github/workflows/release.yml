@@ -9,13 +9,12 @@ jobs:
   # --- JOB 1: Build for Desktop (Windows, macOS, Linux) ---
   build-desktop:
     name: Build Desktop - ${{ matrix.platform }}
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
+        platform: [macos-latest, ubuntu-22.04, windows-latest, ubuntu-24.04-arm]
 
     steps:
       - name: Checkout repository
@@ -99,13 +98,15 @@ jobs:
       - name: Install NDK
         run: sdkmanager "ndk;27.0.11902837"
 
+        id: setup-ndk
+
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
 
-      - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@v2
+      # - name: Cache Rust dependencies
+      #   uses: swatinem/rust-cache@v2
 
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
@@ -123,7 +124,11 @@ jobs:
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
       - name: Initialize Tauri Android project
+        # We must provide the ANDROID_HOME and NDK_HOME environment variables
         run: yarn tauri android init
+        env:
+          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
       # - name: setup Android signing
       #   run: |
@@ -202,7 +207,30 @@ jobs:
     if: false
     runs-on: macos-latest
     steps:
-      - run: echo "iOS build is currently disabled."
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get Version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Generate Changelog File
+        id: generate_changelog_file
+        run: |
+          echo "## Changes in v${{ steps.get_version.outputs.VERSION }}" > changelog.md
+          git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%h))" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> changelog.md
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          body_path: changelog.md
+          files: |
+            artifacts/**/*
 
 
   # --- FINAL JOB: Create the Release ---
