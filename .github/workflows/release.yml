@@ -101,7 +101,7 @@ jobs:
           name: rpi-native-artifact
           path: src-tauri/target/release/bundle/appimage/*.AppImage
   
-  # --- ANDROID BUILD ---
+    # --- ANDROID BUILD ---
   build-android:
     name: Build Android APK and AAB
     if: startsWith(github.event.head_commit.message, 'Release')
@@ -130,8 +130,8 @@ jobs:
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - name: Sync Version to tauri.conf.json and Cargo.toml
         run: |
-          # Write the script to a file to avoid shell interpretation issues
-          cat << 'EOF' > sync-versions.js
+          # Write the script to a .cjs file to force CommonJS mode
+          cat << 'EOF' > sync-versions.cjs
           const fs = require('fs');
           const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
           const newVersion = packageJson.version;
@@ -155,8 +155,8 @@ jobs:
           fs.writeFileSync(cargoTomlPath, cargoToml);
           EOF
 
-          # Execute the script
-          node sync-versions.js
+          # Execute the .cjs script
+          node sync-versions.cjs
       - name: Generate Android Signing Key (in-runner)
         run: |
           keytool -genkey -v \
@@ -188,6 +188,7 @@ jobs:
           path: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
+
   # --- JOB 4: Build for iOS ---
   build-ios:
     name: Build iOS IPA
