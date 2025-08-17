@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- JOB 1: Build for Desktop (RESTORED TO ORIGINAL) ---
+  # --- JOB 1: Build for Desktop (UNTOUCHED) ---
   build-desktop:
     name: Build Desktop - ${{ matrix.platform }}
     if: false
@@ -60,10 +60,10 @@ jobs:
             src-tauri/target/release/bundle/appimage/*.AppImage
             src-tauri/target/release/bundle/dmg/*.dmg
 
-  # --- RASPBERRY PI BUILDS (NOW WITH CORRECT DEPENDENCIES) ---
+  # --- RASPBERRY PI BUILD ---
   build-rpi-native:
     name: Build RPi (Native ARM Runner)
-    if: true
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
@@ -77,7 +77,8 @@ jobs:
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            xdg-utils
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
@@ -101,7 +102,7 @@ jobs:
           name: rpi-native-artifact
           path: src-tauri/target/release/bundle/appimage/*.AppImage
 
-  # --- ANDROID BUILDS (NOW WITH CORRECT ENV VARS and INIT STEP) ---
+  # --- ANDROID BUILDS ---
   build-android-a:
     name: Build Android (Modern Action)
     if: true
@@ -133,10 +134,11 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
-      - name: Initialize Android project
-        run: yarn tauri android init
-      - name: Build Android APK
-        run: yarn tauri android build
+      - name: Initialize and Build Android project
+        run: |
+          yarn tauri android init
+          yarn tauri android build
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -157,9 +159,6 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        id: setup-android
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
@@ -180,18 +179,14 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
-      - name: Initialize Tauri Android project (Using correct env vars)
-        run: yarn tauri android init
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          NDK_HOME: ${{ env.NDK_HOME }}
-      - name: Build Android APK (Using correct env vars & clean SDK_ROOT)
+      - name: Initialize and Build Android project
         run: |
-          unset ANDROID_SDK_ROOT
+          yarn tauri android init
           yarn tauri android build
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          NDK_HOME: ${{ env.NDK_HOME }}
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
