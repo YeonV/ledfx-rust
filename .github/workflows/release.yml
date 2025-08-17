@@ -1,4 +1,4 @@
-name: Universal Cross-Platform Release
+name: Builder
 
 on:
   push:
@@ -9,8 +9,7 @@ jobs:
   # --- JOB 1: Build for Desktop ---
   build-desktop:
     name: Build Desktop - ${{ matrix.platform }}
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -62,9 +61,8 @@ jobs:
 
   # --- RASPBERRY PI BUILD ---
   build-rpi-native:
-    name: Build RPi (Native ARM Runner)
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    name: Build RPi AppImage
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
@@ -105,7 +103,7 @@ jobs:
 
   # --- ANDROID BUILD ---
   build-android:
-    name: Build Android (nttld Action)
+    name: Build Android APK and AAB
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
     steps:
@@ -127,17 +125,36 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
         run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to tauri.conf.json
+      - name: Get Version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Sync Version to tauri.conf.json and Cargo.toml
         shell: bash
         run: |
           node -e "
             const fs = require('fs');
             const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const newVersion = packageJson.version;
             const tauriConfPath = './src-tauri/tauri.conf.json';
             const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
-            tauriConf.version = packageJson.version;
+            tauriConf.version = newVersion;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+            console.log(`Updated ${tauriConfPath} to version ${newVersion}`);
+            const cargoTomlPath = './src-tauri/Cargo.toml';
+            let cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');
+            cargoToml = cargoToml.replace(/^version = \".*\"/m, `version = \"${newVersion}\"`);
+            fs.writeFileSync(cargoTomlPath, cargoToml);
+            console.log(`Updated ${cargoTomlPath} to version ${newVersion}`);
           "
+      - name: Generate Android Signing Key (in-runner)
+        run: |
+          keytool -genkey -v \
+            -keystore $RUNNER_TEMP/ledfx-rust-release-key.jks \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+
       - name: Initialize and Build Android project
         run: |
           yarn tauri android init
@@ -145,18 +162,27 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          # Use the key we just generated in the previous step
+          TAURI_SIGNING_PRIVATE_KEY_PATH: $RUNNER_TEMP/ledfx-rust-release-key.jks
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: android
 
-      - name: Upload APK Artifact
+      - name: Rename Android Artifacts
+        run: |
+          # When signed, the '-unsigned' suffix is removed from the APK name
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
+          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
+
+      - name: Upload APK and AAB Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-artifact-b
+          name: android-artifacts
           path: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
 
   # --- JOB 4: Build for iOS ---
   build-ios:
-    name: Build iOS IPA (Skipped)
+    name: Build iOS IPA
     if: false
     # if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: macos-latest
@@ -190,7 +216,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     if: always() && startsWith(github.event.head_commit.message, 'Release')
-    needs: [build-desktop, build-rpi-native, build-android]
+    needs: [build-desktop, build-rpi-native, build-android, build-ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write
