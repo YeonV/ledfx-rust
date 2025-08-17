@@ -147,8 +147,11 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      - name: Setup Android SDK & NDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r25b
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
@@ -176,17 +179,36 @@ jobs:
           fs.writeFileSync(cargoTomlPath, cargoToml);
           EOF
           node sync-versions.cjs
-      - name: Build Android Project
-        run: yarn tauri android build
       - name: Generate Android Signing Key
         run: |
           keytool -genkey -v \
             -keystore $RUNNER_TEMP/keystore.jks \
             -alias 0 \
             -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass "000000" \
-            -keypass "000000" \
+            -storepass 000000 \
+            -keypass 000000 \
             -dname "CN=0,O=0,C=00"
+      - name: Initialize Android project
+        run: yarn tauri android init
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Setup Android Signing
+        run: |
+          cd src-tauri/gen/android
+          echo "keyAlias=0" > keystore.properties
+          echo "password=0" >> keystore.properties
+          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+          echo "Keystore properties created."
+          cd ../../..
+      - name: Build Signed Android Project
+        run: yarn tauri android build
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v3
       - name: Sign the APK with apksigner
         run: |
           # Find the latest apksigner
