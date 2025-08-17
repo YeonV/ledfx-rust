@@ -72,9 +72,7 @@ jobs:
 # --- JOB 2: Build for Android ---
   build-android:
     name: Build Android APK
-    # Re-enable this when ready
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -128,9 +126,7 @@ jobs:
 # --- JOB 3: Build for Raspberry Pi (ARM Linux) ---
   build-raspberry-pi:
     name: Build Raspberry Pi (ARM64)
-    # Re-enable this when ready
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest # Using a standard runner for cross-compilation is more reliable
     steps:
       - name: Checkout repository
