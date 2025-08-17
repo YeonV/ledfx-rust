@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- JOB 1: Build for Desktop (Working, Disabled) ---
+  # --- JOB 1: Build for Desktop (RESTORED TO ORIGINAL) ---
   build-desktop:
     name: Build Desktop - ${{ matrix.platform }}
     if: false
@@ -34,16 +34,10 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev \
             webkit2gtk-4.1
-        # run: |
-        #   sudo apt-get update
-        #   sudo apt-get install -y \
-        #     libgtk-3-dev \
-        #     libwebkit2gtk-4.0-dev \
-        #     libayatana-appindicator3-dev \
-        #     librsvg2-dev
       - name: Install frontend dependencies (Yarn)
         run: yarn install --frozen-lockfile
-
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
       - name: Sync Version to tauri.conf.json
         shell: bash
         run: |
@@ -55,7 +49,7 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
-      - name: Build with Tauri
+      - name: Build the application
         run: yarn tauri build
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -66,10 +60,10 @@ jobs:
             src-tauri/target/release/bundle/appimage/*.AppImage
             src-tauri/target/release/bundle/dmg/*.dmg
 
-  # --- RASPBERRY PI BUILDS ---
+  # --- RASPBERRY PI BUILDS (NOW WITH CORRECT DEPENDENCIES) ---
   build-rpi-native:
     name: Build RPi (Native ARM Runner)
-    if: startsWith(github.event.head_commit.message, 'Release')
+    if: true
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
@@ -81,11 +75,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Sync Version to tauri.conf.json
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const tauriConfPath = './src-tauri/tauri.conf.json';
+            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+            tauriConf.version = packageJson.version;
+            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          "
       - name: Build the application natively
         run: yarn tauri build
       - name: Upload AppImage Artifact
@@ -94,35 +101,10 @@ jobs:
           name: rpi-native-artifact
           path: src-tauri/target/release/bundle/appimage/*.AppImage
 
-  build-rpi-cross:
-    name: Build RPi (Cross-Compile)
-    if: true # And this one
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Add ARM64 Rust target
-        run: rustup target add aarch64-unknown-linux-gnu
-      - name: Install cross-compilation tool
-        uses: taiki-e/install-action@cross
-      - name: Install System Dependencies for Cross-Compilation
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev
-      - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
-      - name: Build the application for ARM64 using cross
-        run: yarn tauri build --target aarch64-unknown-linux-gnu
-      - name: Upload AppImage Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rpi-cross-artifact
-          path: src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
-
-  # --- ANDROID BUILDS ---
+  # --- ANDROID BUILDS (NOW WITH CORRECT ENV VARS and INIT STEP) ---
   build-android-a:
     name: Build Android (Modern Action)
-    if: true # Let's test this
+    if: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -138,6 +120,19 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Sync Version to tauri.conf.json
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const tauriConfPath = './src-tauri/tauri.conf.json';
+            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+            tauriConf.version = packageJson.version;
+            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          "
       - name: Initialize Android project
         run: yarn tauri android init
       - name: Build Android APK
@@ -150,16 +145,18 @@ jobs:
 
   build-android-b:
     name: Build Android (nttld Action)
-    if: true # And this
+    if: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Rust toolchain with Android targets
-        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-      - name: Setup Java (for Gradle)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - name: Setup Java
         uses: actions/setup-java@v4
-        with: { distribution: "temurin", java-version: "17" }
+        with: { distribution: 'temurin', java-version: '17' }
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         id: setup-android
@@ -170,43 +167,90 @@ jobs:
           ndk-version: r25b
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
-      - name: Initialize Tauri Android project
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Sync Version to tauri.conf.json
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const tauriConfPath = './src-tauri/tauri.conf.json';
+            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+            tauriConf.version = packageJson.version;
+            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          "
+      - name: Initialize Tauri Android project (Using correct env vars)
         run: yarn tauri android init
         env:
-          ANDROID_HOME: ${{ steps.setup-android.outputs.sdk-path }}
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      - name: Build Android APK with clean env vars
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          NDK_HOME: ${{ env.NDK_HOME }}
+      - name: Build Android APK (Using correct env vars & clean SDK_ROOT)
         run: |
           unset ANDROID_SDK_ROOT
           yarn tauri android build
         env:
-          ANDROID_HOME: ${{ steps.setup-android.outputs.sdk-path }}
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          NDK_HOME: ${{ env.NDK_HOME }}
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-artifact-b
           path: src-tauri/gen/android/app/build/outputs/apk/release/*.apk
 
+  # --- JOB 4: Build for iOS ---
+  build-ios:
+    name: Build iOS IPA (Skipped)
+    if: false
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get Version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Generate Changelog File
+        id: generate_changelog_file
+        run: |
+          echo "## Changes in v${{ steps.get_version.outputs.VERSION }}" > changelog.md
+          git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%h))" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> changelog.md
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          body_path: changelog.md
+          files: |
+            artifacts/**/*
+
   # --- FINAL JOB: Create the Release ---
   create-release:
     name: Create GitHub Release
     if: always() && startsWith(github.event.head_commit.message, 'Release')
-    needs: [build-desktop, build-rpi-native, build-rpi-cross, build-android-a, build-android-b] # Needs all new jobs
+    needs: [build-desktop, build-rpi-native, build-android-a, build-android-b]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
       - name: Get Version from package.json
         id: get_version
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - name: Download all artifacts
         uses: actions/download-artifact@v4
-        with: { path: artifacts }
+        with:
+          path: artifacts
       - name: Generate Changelog File
+        id: generate_changelog_file
         run: |
           echo "## Changes in v${{ steps.get_version.outputs.VERSION }}" > changelog.md
           git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%h))" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> changelog.md
