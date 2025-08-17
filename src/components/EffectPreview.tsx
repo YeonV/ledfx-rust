@@ -2,18 +2,22 @@
 
 import { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
+import { useFrameStore } from '../store/frameStore';
+import { invoke } from '@tauri-apps/api/core';
 
 interface EffectPreviewProps {
-  pixels: number[] | undefined; // Receives pixels as a prop
+  ipAddress: string;
+  active: boolean;
 }
 
-export function EffectPreview({ pixels }: EffectPreviewProps) {
+export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Use a ref to store the latest pixel data for the resize observer.
-  const pixelsRef = useRef<number[] | undefined>(pixels);
-  pixelsRef.current = pixels;
 
   useEffect(() => {
+    // When the component mounts, tell the backend we are interested in this IP.
+    invoke('subscribe_to_frames', { ipAddress });
+    console.log(`Subscribed to frames for ${ipAddress}`);
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -23,6 +27,12 @@ export function EffectPreview({ pixels }: EffectPreviewProps) {
       if (!ctx || !canvas) return;
       const p = pixelData || [];
       const numLeds = p.length / 3;
+
+      const { width, height } = canvas.getBoundingClientRect();
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
 
       if (numLeds === 0) {
         ctx.fillStyle = 'black';
@@ -40,22 +50,27 @@ export function EffectPreview({ pixels }: EffectPreviewProps) {
       }
     };
 
-    const observer = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      canvas.width = width;
-      canvas.height = height;
-      // Redraw the most recent frame on resize.
-      drawFrame(pixelsRef.current);
-    });
-    observer.observe(canvas);
+    if (!active) {
+      drawFrame([]);
+    }
 
-    // Draw the initial frame when the component mounts or pixels change.
-    drawFrame(pixels);
+    const unsubscribeFromStore = useFrameStore.subscribe(
+      (state) => {
+        if (active) {
+          const pixels = state.frames[ipAddress];
+          drawFrame(pixels);
+        }
+      }
+    );
 
+    // The cleanup function
     return () => {
-      observer.disconnect();
+      unsubscribeFromStore();
+      // Tell the backend we are no longer interested in this IP.
+      invoke('unsubscribe_from_frames', { ipAddress });
+      console.log(`Unsubscribed from frames for ${ipAddress}`);
     };
-  }, [pixels]); // Re-run this effect only when the pixels prop itself changes.
+  }, [active, ipAddress]);
 
   return (
     <Box sx={{ border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 1, overflow: 'hidden' }}>

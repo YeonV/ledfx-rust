@@ -201,6 +201,8 @@ jobs:
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
           echo "Keystore properties created."
           cd ../../..
+      - name: Generate Icon
+        run: yarn tauri icon
       - name: Build Signed Android Project
         run: yarn tauri android build
         env:

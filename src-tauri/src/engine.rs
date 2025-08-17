@@ -3,34 +3,38 @@
 use crate::effects::{Effect, RainbowEffect, ScanEffect, ScrollEffect, BladePowerEffect};
 use crate::audio::SharedAudioData;
 use crate::utils::send_ddp_packet;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
 use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::State;
+use tauri::{State, AppHandle, Emitter};
 
-#[derive(Default)]
-pub struct SharedFrameBuffer(pub Mutex<HashMap<String, Vec<u8>>>);
-
+// --- The Engine's Internal State ---
 struct ActiveEffect {
     led_count: u32,
     effect: Box<dyn Effect>,
 }
 
+// --- Engine Commands (Message Passing) ---
 pub enum EngineCommand {
     StartEffect { ip_address: String, led_count: u32, effect_id: String },
     StopEffect { ip_address: String },
+    Subscribe { ip_address: String },
+    Unsubscribe { ip_address: String },
 }
 
+// --- The Engine's Main Loop ---
 pub fn run_effect_engine(
     command_rx: mpsc::Receiver<EngineCommand>,
-    frame_buffer: State<SharedFrameBuffer>,
     audio_data: State<SharedAudioData>,
+    app_handle: AppHandle,
 ) {
     let mut active_effects: HashMap<String, ActiveEffect> = HashMap::new();
+    let mut subscribed_ips: HashSet<String> = HashSet::new();
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     let mut frame_count: u8 = 0;
+    let mut latest_frames: HashMap<String, Vec<u8>> = HashMap::new();
 
     loop {
         while let Ok(command) = command_rx.try_recv() {
@@ -51,27 +55,39 @@ pub fn run_effect_engine(
                         let black_data = vec![0; 300 * 3];
                         let destination = format!("{}:4048", ip_address);
                         let _ = send_ddp_packet(&socket, &destination, 0, &black_data, 0);
-                        frame_buffer.0.lock().unwrap().remove(&ip_address);
+                        // --- THE FIX: Remove the frame data on stop ---
+                        latest_frames.remove(&ip_address);
                     }
+                }
+                EngineCommand::Subscribe { ip_address } => {
+                    println!("ENGINE: Frontend subscribed to {}", ip_address);
+                    subscribed_ips.insert(ip_address);
+                }
+                EngineCommand::Unsubscribe { ip_address } => {
+                    println!("ENGINE: Frontend unsubscribed from {}", ip_address);
+                    subscribed_ips.remove(&ip_address);
                 }
             }
         }
 
         let latest_audio_data = audio_data.0.lock().unwrap().clone();
-        
-        // --- DIAGNOSTIC LOGGING ---
-        // if !active_effects.is_empty() {
-        //     println!("ENGINE THREAD: Read Volume = {:.4}", latest_audio_data.volume);
-        // }
-
         frame_count = frame_count.wrapping_add(1);
-        let mut latest_frames = frame_buffer.0.lock().unwrap();
 
         for (ip, active_effect) in &mut active_effects {
             let data = active_effect.effect.render_frame(active_effect.led_count, &latest_audio_data);
             let destination = format!("{}:4048", ip);
             let _ = send_ddp_packet(&socket, &destination, 0, &data, frame_count);
             latest_frames.insert(ip.clone(), data);
+        }
+
+        let payload: HashMap<String, Vec<u8>> = latest_frames
+            .iter()
+            .filter(|(ip, _)| subscribed_ips.contains(*ip))
+            .map(|(ip, data)| (ip.clone(), data.clone()))
+            .collect();
+
+        if !payload.is_empty() {
+            app_handle.emit("engine-tick", &payload).unwrap();
         }
 
         thread::sleep(Duration::from_millis(16));
@@ -97,9 +113,17 @@ pub fn stop_effect(
 }
 
 #[tauri::command]
-pub fn get_latest_frames(
-    frame_buffer: State<SharedFrameBuffer>,
-) -> Result<HashMap<String, Vec<u8>>, String> {
-    let frames = frame_buffer.0.lock().unwrap().clone();
-    Ok(frames)
+pub fn subscribe_to_frames(
+    ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>,
+) -> Result<(), String> {
+    command_tx.send(EngineCommand::Subscribe { ip_address }).unwrap();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn unsubscribe_from_frames(
+    ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>,
+) -> Result<(), String> {
+    command_tx.send(EngineCommand::Unsubscribe { ip_address }).unwrap();
+    Ok(())
 }
