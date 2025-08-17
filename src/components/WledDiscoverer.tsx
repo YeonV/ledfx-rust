@@ -1,32 +1,20 @@
 // src/components/WledDiscoverer.tsx
+
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { EffectPreview } from './EffectPreview';
 
-// --- MUI Imports ---
 import {
-  Box,
-  Button,
-  Card,
-  CardActions,
-  CardContent,
-  CardHeader,
-  Grid,
-  IconButton,
-  LinearProgress,
-  Stack,
-  TextField,
-  Typography,
-  Alert
+  Box, Button, Card, CardActions, CardContent, CardHeader, Grid, IconButton,
+  LinearProgress, Stack, TextField, Typography, Alert, Select, MenuItem,
+  FormControl, InputLabel
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 import SearchIcon from '@mui/icons-material/Search';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
-
-import { Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 
 interface LedsInfo { count: number; }
 interface MapInfo { id: number; }
@@ -48,18 +36,31 @@ export function WledDiscoverer() {
   const [duration, setDuration] = useState(10);
   const [activeEffects, setActiveEffects] = useState<Record<string, boolean>>({});
   const [selectedEffects, setSelectedEffects] = useState<Record<string, string>>({});
+  const [frameData, setFrameData] = useState<Record<string, number[]>>({});
 
-useEffect(() => {
+  // Effect for mDNS discovery
+  useEffect(() => {
     const unlistenPromise = listen<WledDevice>('wled-device-found', (event) => {
       const foundDevice = event.payload;
-      setDevices((prevDevices) => {
-        if (!prevDevices.some(d => d.ip_address === foundDevice.ip_address)) {
-          return [...prevDevices, foundDevice];
-        }
-        return prevDevices;
-      });
+      setDevices((prev) => !prev.some(d => d.ip_address === foundDevice.ip_address) ? [...prev, foundDevice] : prev);
     });
     return () => { unlistenPromise.then(unlisten => unlisten()); };
+  }, []);
+
+  // Effect for the global animation loop
+  useEffect(() => {
+    let animationFrameId: number;
+    const fetchFrames = async () => {
+      try {
+        const frames = await invoke<Record<string, number[]>>('get_latest_frames');
+        setFrameData(frames);
+      } catch (e) {
+        console.error("Failed to fetch frames:", e);
+      }
+      animationFrameId = requestAnimationFrame(fetchFrames);
+    };
+    animationFrameId = requestAnimationFrame(fetchFrames);
+    return () => cancelAnimationFrame(animationFrameId);
   }, []);
 
   const handleDiscover = async () => {
@@ -74,15 +75,10 @@ useEffect(() => {
       setIsScanning(false);
     }
   };
+
   const handleEffectSelection = (device: WledDevice, newEffectId: string) => {
-    // Step 1: Update the UI state immediately.
     setSelectedEffects(prev => ({ ...prev, [device.ip_address]: newEffectId }));
-
-    // Step 2: Check if an effect is already running for this device.
     const isCurrentlyActive = activeEffects[device.ip_address] || false;
-
-    // Step 3: If it is active, immediately send the command to start the new effect.
-    // The backend will handle stopping the old one first.
     if (isCurrentlyActive) {
       invoke('start_effect', {
         ipAddress: device.ip_address,
@@ -90,14 +86,13 @@ useEffect(() => {
         effectId: newEffectId,
       }).catch(err => {
         console.error("Failed to switch effect:", err);
-        // If the switch fails, update the UI to show it's stopped.
         setActiveEffects(prev => ({ ...prev, [device.ip_address]: false }));
       });
     }
   };
 
   const handleStartEffect = async (device: WledDevice) => {
-    const effectId = selectedEffects[device.ip_address] || 'rainbow'; // Default to rainbow
+    const effectId = selectedEffects[device.ip_address] || 'rainbow';
     try {
       await invoke('start_effect', {
         ipAddress: device.ip_address,
@@ -123,26 +118,19 @@ useEffect(() => {
     <Box sx={{ width: '100%', p: 2 }}>
       <Stack spacing={2} direction="row" alignItems="center" sx={{ mb: 2 }}>
         <TextField
-          label="Scan Duration (s)"
-          type="number"
-          value={duration}
+          label="Scan Duration (s)" type="number" value={duration}
           onChange={(e) => setDuration(Number(e.target.value))}
-          disabled={isScanning}
-          size="small"
+          disabled={isScanning} size="small"
         />
         <LoadingButton
-          onClick={handleDiscover}
-          loading={isScanning}
-          loadingPosition="start"
-          startIcon={<SearchIcon />}
-          variant="contained"
+          onClick={handleDiscover} loading={isScanning} loadingPosition="start"
+          startIcon={<SearchIcon />} variant="contained"
         >
           {isScanning ? 'Scanning...' : 'Discover'}
         </LoadingButton>
       </Stack>
 
       {isScanning && <LinearProgress sx={{ mb: 2 }} />}
-      
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Grid container spacing={2}>
@@ -151,27 +139,25 @@ useEffect(() => {
           const selectedEffect = selectedEffects[device.ip_address] || 'rainbow';
 
           return (
-            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={device.ip_address}>
-                <Card variant="outlined">
-              <CardHeader
-                avatar={<IconButton><LightbulbIcon color={activeEffects[device.ip_address] ? 'warning' : 'inherit'} /></IconButton>}
-                title={device.name}
-                subheader={device.ip_address}
-              />
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={device.ip_address}>              <Card variant="outlined">
+                <CardHeader
+                  avatar={<IconButton><LightbulbIcon color={isActive ? 'warning' : 'inherit'} /></IconButton>}
+                  title={device.name}
+                  subheader={device.ip_address}
+                />
                 <CardContent>
-                <EffectPreview ipAddress={device.ip_address} active={isActive} />
-                <Typography variant="body2" color="text.secondary">
-                  Version: {device.version}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  LEDs: {device.leds.count}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Architecture: {device.architecture}
-                </Typography>
+                  <EffectPreview pixels={frameData[device.ip_address]} />
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                    Version: {device.version}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    LEDs: {device.leds.count}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Architecture: {device.architecture}
+                  </Typography>
                 </CardContent>
                 <CardActions sx={{ justifyContent: 'space-between' }}>
-                  {/* --- NEW: Effect Selector Dropdown --- */}
                   <FormControl size="small" sx={{ minWidth: 120 }}>
                     <InputLabel>Effect</InputLabel>
                     <Select
@@ -185,7 +171,6 @@ useEffect(() => {
                     </Select>
                   </FormControl>
                   
-                  {/* --- MODIFIED: Button logic --- */}
                   <Button
                     size="small"
                     onClick={() => isActive ? handleStopEffect(device.ip_address) : handleStartEffect(device)}
