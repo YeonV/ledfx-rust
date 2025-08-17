@@ -14,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
+        platform: [ubuntu-22.04]
+        # platform: [macos-latest, ubuntu-22.04, windows-latest]
 
     steps:
       - name: Checkout repository
@@ -35,7 +36,8 @@ jobs:
             librsvg2-dev \
             patchelf \
             libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev
+            libjavascriptcoregtk-4.1-dev \
+            webkit2gtk-4.1
 
       - name: Install frontend dependencies (Yarn)
         run: yarn install --frozen-lockfile
@@ -75,19 +77,46 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Add Android targets
-        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
-      
-      # --- THE DEFINITIVE FIX for Android ---
-      - name: Setup full Android SDK environment
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Cache NDK
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          # Path where NDK version 27.0.11902837 is expected to be installed by setup-android
+          path: /usr/local/lib/android/sdk/ndk/27.0.11902837
+          key: ndk-${{ runner.os }}-27.0.11902837
+
+      - name: Setup Android SDK and NDK
         uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719 # v16
+
+      - name: Install NDK
+        run: sdkmanager "ndk;27.0.11902837"
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: setup Android signing
+        run: |
+          cd src-tauri/gen/android
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
+          echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+          base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
+          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+          echo "Keystore properties created."
+          cd ../../.. # Go back to root
+
 
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
@@ -118,14 +147,14 @@ jobs:
   build-raspberry-pi:
     name: Build Raspberry Pi (ARM64)
     if: startsWith(github.event.head_commit.message, 'Release')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Install cross-compilation tool
-        uses: taiki-e/install-action@cross
+      # - name: Install cross-compilation tool
+      #   uses: taiki-e/install-action@cross
       
       # --- THE DEFINITIVE FIX for RPi ---
       - name: Install ARM64 system dependencies
@@ -158,7 +187,7 @@ jobs:
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
       - name: Build the application for ARM64 using cross
-        run: cd src-tauri && cross build --release --target aarch64-unknown-linux-gnu
+        run: yarn tauri build --target aarch64-unknown-linux-gnu
       - name: Manually bundle with Tauri CLI
         run: yarn tauri build --bundles appimage --target aarch64-unknown-linux-gnu
       - name: Upload AppImage Artifact
