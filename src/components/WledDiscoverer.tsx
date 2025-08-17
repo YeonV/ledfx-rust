@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { DeviceCard } from './DeviceCard';
-import { WledDevice } from '../types/wled'; // <-- IMPORT the central type
+import { WledDevice } from '../types/wled';
 
 import {
-  Box, Grid, LinearProgress, Stack, TextField, Alert
+  Box, Grid, LinearProgress, Stack, TextField, Alert, Slider, Typography
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 import SearchIcon from '@mui/icons-material/Search';
@@ -19,6 +19,7 @@ export function WledDiscoverer() {
   const [duration, setDuration] = useState(10);
   const [activeEffects, setActiveEffects] = useState<Record<string, boolean>>({});
   const [selectedEffects, setSelectedEffects] = useState<Record<string, string>>({});
+  const [targetFps, setTargetFps] = useState(60);
 
   useEffect(() => {
     const unlistenPromise = listen<WledDevice>('wled-device-found', (event) => {
@@ -27,6 +28,16 @@ export function WledDiscoverer() {
     });
     return () => { unlistenPromise.then(unlisten => unlisten()); };
   }, []);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      console.log(`Setting backend FPS to: ${targetFps}`);
+      invoke('set_target_fps', { fps: targetFps }).catch(console.error);
+    }, 500);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [targetFps]);
 
   const handleDiscover = async () => {
     setIsScanning(true);
@@ -90,6 +101,20 @@ export function WledDiscoverer() {
           {isScanning ? 'Scanning...' : 'Discover'}
         </LoadingButton>
       </Stack>
+
+      <Box sx={{ width: 300, mb: 2 }}>
+        <Typography gutterBottom>Target FPS: {targetFps}</Typography>
+        <Slider
+          value={targetFps}
+          onChange={(e, newValue) => setTargetFps(newValue as number)}
+          aria-labelledby="target-fps-slider"
+          valueLabelDisplay="auto"
+          step={5}
+          marks
+          min={10}
+          max={120}
+        />
+      </Box>
 
       {isScanning && <LinearProgress sx={{ mb: 2 }} />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

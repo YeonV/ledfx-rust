@@ -5,9 +5,9 @@ use crate::audio::SharedAudioData;
 use crate::utils::send_ddp_packet;
 use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
-use std::sync::{mpsc, Mutex};
+use std::sync::{mpsc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{State, AppHandle, Emitter};
 
 // --- The Engine's Internal State ---
@@ -18,10 +18,23 @@ struct ActiveEffect {
 
 // --- Engine Commands (Message Passing) ---
 pub enum EngineCommand {
-    StartEffect { ip_address: String, led_count: u32, effect_id: String },
-    StopEffect { ip_address: String },
-    Subscribe { ip_address: String },
-    Unsubscribe { ip_address: String },
+    StartEffect {
+        ip_address: String,
+        led_count: u32,
+        effect_id: String,
+    },
+    StopEffect {
+        ip_address: String,
+    },
+    Subscribe {
+        ip_address: String,
+    },
+    Unsubscribe {
+        ip_address: String,
+    },
+    SetTargetFps {
+        fps: u64,
+    },
 }
 
 // --- The Engine's Main Loop ---
@@ -35,8 +48,11 @@ pub fn run_effect_engine(
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     let mut frame_count: u8 = 0;
     let mut latest_frames: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut target_frame_duration = Duration::from_millis(1000 / 60); // Default 60 FPS
 
     loop {
+        let frame_start = Instant::now();
+
         while let Ok(command) = command_rx.try_recv() {
             match command {
                 EngineCommand::StartEffect { ip_address, led_count, effect_id } => {
@@ -55,17 +71,20 @@ pub fn run_effect_engine(
                         let black_data = vec![0; 300 * 3];
                         let destination = format!("{}:4048", ip_address);
                         let _ = send_ddp_packet(&socket, &destination, 0, &black_data, 0);
-                        // --- THE FIX: Remove the frame data on stop ---
                         latest_frames.remove(&ip_address);
                     }
                 }
                 EngineCommand::Subscribe { ip_address } => {
-                    println!("ENGINE: Frontend subscribed to {}", ip_address);
                     subscribed_ips.insert(ip_address);
                 }
                 EngineCommand::Unsubscribe { ip_address } => {
-                    println!("ENGINE: Frontend unsubscribed from {}", ip_address);
                     subscribed_ips.remove(&ip_address);
+                }
+                EngineCommand::SetTargetFps { fps } => {
+                    println!("ENGINE: Setting Target FPS to {}", fps);
+                    if fps > 0 {
+                        target_frame_duration = Duration::from_millis(1000 / fps);
+                    }
                 }
             }
         }
@@ -90,14 +109,19 @@ pub fn run_effect_engine(
             app_handle.emit("engine-tick", &payload).unwrap();
         }
 
-        thread::sleep(Duration::from_millis(16));
+        let frame_duration = frame_start.elapsed();
+        if let Some(sleep_duration) = target_frame_duration.checked_sub(frame_duration) {
+            thread::sleep(sleep_duration);
+        }
     }
 }
 
 // --- Tauri Commands ---
 #[tauri::command]
 pub fn start_effect(
-    ip_address: String, led_count: u32, effect_id: String,
+    ip_address: String,
+    led_count: u32,
+    effect_id: String,
     command_tx: State<mpsc::Sender<EngineCommand>>,
 ) -> Result<(), String> {
     command_tx.send(EngineCommand::StartEffect { ip_address, led_count, effect_id }).unwrap();
@@ -106,7 +130,8 @@ pub fn start_effect(
 
 #[tauri::command]
 pub fn stop_effect(
-    ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>,
+    ip_address: String,
+    command_tx: State<mpsc::Sender<EngineCommand>>,
 ) -> Result<(), String> {
     command_tx.send(EngineCommand::StopEffect { ip_address }).unwrap();
     Ok(())
@@ -114,7 +139,8 @@ pub fn stop_effect(
 
 #[tauri::command]
 pub fn subscribe_to_frames(
-    ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>,
+    ip_address: String,
+    command_tx: State<mpsc::Sender<EngineCommand>>,
 ) -> Result<(), String> {
     command_tx.send(EngineCommand::Subscribe { ip_address }).unwrap();
     Ok(())
@@ -122,8 +148,18 @@ pub fn subscribe_to_frames(
 
 #[tauri::command]
 pub fn unsubscribe_from_frames(
-    ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>,
+    ip_address: String,
+    command_tx: State<mpsc::Sender<EngineCommand>>,
 ) -> Result<(), String> {
     command_tx.send(EngineCommand::Unsubscribe { ip_address }).unwrap();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_target_fps(
+    fps: u64,
+    command_tx: State<mpsc::Sender<EngineCommand>>,
+) -> Result<(), String> {
+    command_tx.send(EngineCommand::SetTargetFps { fps }).unwrap();
     Ok(())
 }
