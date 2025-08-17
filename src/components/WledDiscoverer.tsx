@@ -168,6 +168,7 @@ export function WledDiscoverer() {
                       <MenuItem value="rainbow">Rainbow</MenuItem>
                       <MenuItem value="scroll">Scroll</MenuItem>
                       <MenuItem value="scan">Scan</MenuItem>
+                      <MenuItem value="bladepower">BladePower</MenuItem>
                     </Select>
                   </FormControl>
                   

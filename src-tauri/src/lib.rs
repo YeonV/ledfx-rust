@@ -3,6 +3,8 @@
 mod wled;
 mod effects;
 mod engine;
+mod audio;
+mod utils;
 
 use std::sync::mpsc;
 use std::thread;
@@ -12,11 +14,17 @@ use tauri::Manager;
 pub fn run() {
     let (command_tx, command_rx) = mpsc::channel::<engine::EngineCommand>();
     let frame_buffer = engine::SharedFrameBuffer::default();
+    let audio_data = audio::SharedAudioData::default();
+
+    // --- THE FIX: Clone the Arc before setting up the app ---
+    // This gives us a handle to the data that is safe to move into the audio thread.
+    let audio_data_clone_for_thread = audio_data.0.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(command_tx)
         .manage(frame_buffer)
+        .manage(audio_data) // The original is managed by Tauri for the engine
         .invoke_handler(tauri::generate_handler![
             wled::discover_wled,
             engine::start_effect,
@@ -24,16 +32,20 @@ pub fn run() {
             engine::get_latest_frames
         ])
         .setup(|app| {
-            // --- THE FIX ---
-            // 1. Get an AppHandle, which is safe to move to other threads.
             let app_handle = app.handle().clone();
 
-            // 2. Move the handle into the new thread.
+            // Spawn the effect engine thread
             thread::spawn(move || {
-                // 3. Get the state from the handle *inside* the new thread.
                 let frame_buffer_state = app_handle.state::<engine::SharedFrameBuffer>();
-                engine::run_effect_engine(command_rx, frame_buffer_state);
+                let audio_data_state = app_handle.state::<audio::SharedAudioData>();
+                engine::run_effect_engine(command_rx, frame_buffer_state, audio_data_state);
             });
+
+            // --- THE FIX: Spawn the audio capture thread with the cloned Arc ---
+            thread::spawn(move || {
+                audio::run_audio_capture(audio_data_clone_for_thread);
+            });
+
             Ok(())
         })
         .run(tauri::generate_context!())
