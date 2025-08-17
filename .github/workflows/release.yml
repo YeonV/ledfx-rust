@@ -6,20 +6,29 @@ on:
   workflow_dispatch:
 
 jobs:
-  # --- JOB 1: Build for Desktop ---
+  # --- Build for Desktop ---
   build-desktop:
-    name: Build ${{ matrix.platform }}
+    name: Build ${{ matrix.pretty_name }}
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
+        include:
+          - platform: macos-latest
+            pretty_name: MacOS
+          - platform: windows-latest
+            pretty_name: Windows
+          - platform: ubuntu-22.04
+            pretty_name: Linux
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
+      - name: Get Version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Linux dependencies
@@ -52,18 +61,29 @@ jobs:
           "
       - name: Build the application
         run: yarn tauri build
+      - name: Rename Artifacts
+        shell: bash
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            mv src-tauri/target/release/bundle/msi/*.msi src-tauri/target/release/bundle/msi/LedFx-rust_${VERSION}_windows.msi
+          elif [ "${{ runner.os }}" == "Linux" ]; then
+            mv src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/appimage/LedFx-rust_${VERSION}_linux.AppImage
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            mv src-tauri/target/release/bundle/dmg/*.dmg src-tauri/target/release/bundle/dmg/LedFx-rust_${VERSION}_mac.dmg
+          fi
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: desktop-artifacts-${{ matrix.platform }}
           path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/msi/LedFx-rust_*.msi
+            src-tauri/target/release/bundle/appimage/LedFx-rust_*.AppImage
+            src-tauri/target/release/bundle/dmg/LedFx-rust_*.dmg
 
   # --- RASPBERRY PI BUILD ---
   build-rpi-native:
-    name: Build raspberry-pi
+    name: Build Raspberry Pi
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-24.04-arm
     steps:
@@ -71,6 +91,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
+      - name: Get Version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install ARM64 system dependencies
@@ -99,15 +122,17 @@ jobs:
           "
       - name: Build the application natively
         run: yarn tauri build
+      - name: Rename Artifact
+        run: mv src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/appimage/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_raspberry.AppImage
       - name: Upload AppImage Artifact
         uses: actions/upload-artifact@v4
         with:
           name: rpi-native-artifact
-          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          path: src-tauri/target/release/bundle/appimage/LedFx-rust_*.AppImage
 
   # --- ANDROID BUILD ---
   build-android:
-    name: Build android
+    name: Build Android
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
     steps:
@@ -179,51 +204,50 @@ jobs:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Rename Android Artifacts
         run: |
-          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
-          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
+          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
       - name: Upload APK and AAB Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: android-artifacts
           path: |
-            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
-            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_*.aab
 
-  # --- JOB 4: Build for iOS ---
+  # --- Build for iOS ---
   build-ios:
-    name: Build ios
+    name: Build iOS
     if: false
     # if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Add iOS targets
+        run: rustup target add aarch64-apple-ios x86_64-apple-ios
+      - name: Install frontend dependencies (Yarn)
+        run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Install Apple certificate and provisioning profile
+        # TODO: This is the complex part. You need to add your certs/profiles as secrets.
+        uses: apple-actions/import-codesign-certs@v3
         with:
-          fetch-depth: 0
-      - name: Get Version from package.json
-        id: get_version
-        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Build iOS App
+        run: yarn tauri ios build
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
         with:
-          path: artifacts
-      - name: Generate Changelog File
-        id: generate_changelog_file
-        run: |
-          echo "## Changes in v${{ steps.get_version.outputs.VERSION }}" > changelog.md
-          git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%h))" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> changelog.md
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.get_version.outputs.VERSION }}
-          name: Release v${{ steps.get_version.outputs.VERSION }}
-          body_path: changelog.md
-          files: |
-            artifacts/**/*
+          name: ios-artifact
+          path: src-tauri/gen/apple/build/release/*.ipa
 
-  # --- FINAL JOB: Create the Release ---
+  # --- Create the Release ---
   create-release:
-    name: Create GitHub Release
+    name: Create Release
     if: always() && startsWith(github.event.head_commit.message, 'Release')
     needs: [build-desktop, build-rpi-native, build-android, build-ios]
     runs-on: ubuntu-latest
