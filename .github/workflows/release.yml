@@ -143,7 +143,7 @@ jobs:
       - name: Install Rust toolchain with Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x686_64-linux-android
       - name: Setup Java
         uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
@@ -187,23 +187,36 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
-      - name: Initialize Android project
-        run: yarn tauri android init
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      - name: Create Keystore Properties File
+      - name: Configure Signing in tauri.conf.json
         run: |
-          echo "storeFile=$RUNNER_TEMP/ledfx-rust-release-key.jks" > src-tauri/gen/android/keystore.properties
-          echo "password=android" >> src-tauri/gen/android/keystore.properties
-          echo "keyAlias=androiddebugkey" >> src-tauri/gen/android/keystore.properties
+          cat << 'EOF' > configure-signing.cjs
+          const fs = require('fs');
+          const tauriConfPath = './src-tauri/tauri.conf.json';
+          let tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+          
+          // Ensure the android and signing objects exist
+          tauriConf.android = tauriConf.android || {};
+          tauriConf.android.signing = tauriConf.android.signing || {};
+          
+          // Set the signing configuration
+          tauriConf.android.signing.keyPath = `${process.env.RUNNER_TEMP}/ledfx-rust-release-key.jks`;
+          tauriConf.android.signing.keyAlias = 'androiddebugkey';
+          
+          fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          console.log('Successfully configured Android signing in tauri.conf.json');
+          EOF
+          node configure-signing.cjs
       - name: Build Signed Android Project
-        run: yarn tauri android build
+        run: |
+          yarn tauri android init
+          yarn tauri android build
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: android
       - name: Rename Android Artifacts
         run: |
+          # A successful signing will produce a file WITHOUT '-unsigned'
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
           mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
       - name: Upload APK and AAB Artifacts
@@ -213,7 +226,6 @@ jobs:
           path: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_*.apk
             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_*.aab
-
   # --- Build for iOS ---
   build-ios:
     name: Build iOS
