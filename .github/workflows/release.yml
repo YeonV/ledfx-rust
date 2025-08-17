@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Linux dependencies
@@ -61,12 +63,14 @@ jobs:
 
   # --- RASPBERRY PI BUILD ---
   build-rpi-native:
-    name: Build RPi AppImage
+    name: Build raspberry-pi
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install ARM64 system dependencies
@@ -100,15 +104,17 @@ jobs:
         with:
           name: rpi-native-artifact
           path: src-tauri/target/release/bundle/appimage/*.AppImage
-  
+
   # --- ANDROID BUILD ---
   build-android:
-    name: Build Android APK and AAB
+    name: Build android
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
       - name: Install Rust toolchain with Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -164,9 +170,8 @@ jobs:
       - name: Create Keystore Properties File
         run: |
           echo "storeFile=$RUNNER_TEMP/ledfx-rust-release-key.jks" > src-tauri/gen/android/keystore.properties
-          echo "storePassword=android" >> src-tauri/gen/android/keystore.properties
+          echo "password=android" >> src-tauri/gen/android/keystore.properties
           echo "keyAlias=androiddebugkey" >> src-tauri/gen/android/keystore.properties
-          echo "keyPassword=android" >> src-tauri/gen/android/keystore.properties
       - name: Build Signed Android Project
         run: yarn tauri android build
         env:
@@ -174,7 +179,6 @@ jobs:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Rename Android Artifacts
         run: |
-          # A successful signing will produce a file WITHOUT '-unsigned'
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
           mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
       - name: Upload APK and AAB Artifacts
@@ -187,7 +191,7 @@ jobs:
 
   # --- JOB 4: Build for iOS ---
   build-ios:
-    name: Build iOS IPA
+    name: Build ios
     if: false
     # if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: macos-latest

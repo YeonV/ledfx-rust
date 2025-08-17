@@ -1,3 +1,3 @@
-trash!
+# LedFx Rust
 
-tauri is still trash!
+### Testing Tauri
