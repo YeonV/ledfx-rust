@@ -2,12 +2,11 @@
 
 import React from 'react';
 import { EffectPreview } from './EffectPreview';
-import { useFrameStore } from '../store/frameStore';
 import { WledDevice } from '../bindings';
 
 import {
   Button, Card, CardActions, CardContent, CardHeader, FormControl,
-  IconButton, InputLabel, MenuItem, Select, Typography
+  InputLabel, MenuItem, Select, Typography
 } from '@mui/material';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -30,8 +29,6 @@ export const DeviceCard = React.memo(({
   onStart,
   onStop,
 }: DeviceCardProps) => {
-  const pixels = useFrameStore(state => state.frames[device.ip_address]);
-
   return (
     <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <CardHeader
