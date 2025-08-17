@@ -19,7 +19,8 @@ pub fn run() {
             greet,
             ping,
             wled::discover_wled,
-            effects::toggle_ddp_effect
+            effects::start_effect, // <-- NEW
+            effects::stop_effect   // <-- NEW
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

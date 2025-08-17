@@ -84,7 +84,6 @@ export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
 
   return (
     <Box sx={{ border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 1, overflow: 'hidden' }}>
-      {/* --- THE FIX: Remove fixed size, apply CSS size --- */}
       <canvas
         ref={canvasRef}
         style={{ width: '100%', height: '20px', display: 'block' }}
