@@ -100,7 +100,7 @@ jobs:
         with:
           name: rpi-native-artifact
           path: src-tauri/target/release/bundle/appimage/*.AppImage
-
+  
   # --- ANDROID BUILD ---
   build-android:
     name: Build Android APK and AAB
@@ -129,23 +129,34 @@ jobs:
         id: get_version
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - name: Sync Version to tauri.conf.json and Cargo.toml
-        shell: bash
         run: |
-          node -e "
-            const fs = require('fs');
-            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const newVersion = packageJson.version;
-            const tauriConfPath = './src-tauri/tauri.conf.json';
-            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
-            tauriConf.version = newVersion;
-            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
-            console.log(`Updated ${tauriConfPath} to version ${newVersion}`);
-            const cargoTomlPath = './src-tauri/Cargo.toml';
-            let cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');
-            cargoToml = cargoToml.replace(/^version = \".*\"/m, `version = \"${newVersion}\"`);
-            fs.writeFileSync(cargoTomlPath, cargoToml);
-            console.log(`Updated ${cargoTomlPath} to version ${newVersion}`);
-          "
+          # Write the script to a file to avoid shell interpretation issues
+          cat << 'EOF' > sync-versions.js
+          const fs = require('fs');
+          const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+          const newVersion = packageJson.version;
+
+          if (typeof newVersion !== 'string' || newVersion.length < 3) {
+            throw new Error(`Failed to read a valid version from package.json. Got: ${newVersion}`);
+          }
+
+          console.log(`Syncing all files to version: ${newVersion}`);
+
+          // Sync tauri.conf.json
+          const tauriConfPath = './src-tauri/tauri.conf.json';
+          let tauriConf = fs.readFileSync(tauriConfPath, 'utf8');
+          tauriConf = tauriConf.replace(/"version": "0.0.1"/, `"version": "${newVersion}"`);
+          fs.writeFileSync(tauriConfPath, tauriConf);
+
+          // Sync Cargo.toml
+          const cargoTomlPath = './src-tauri/Cargo.toml';
+          let cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');
+          cargoToml = cargoToml.replace(/version = "0.0.1"/, `version = "${newVersion}"`);
+          fs.writeFileSync(cargoTomlPath, cargoToml);
+          EOF
+
+          # Execute the script
+          node sync-versions.js
       - name: Generate Android Signing Key (in-runner)
         run: |
           keytool -genkey -v \
@@ -162,13 +173,11 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          # Use the key we just generated in the previous step
           TAURI_SIGNING_PRIVATE_KEY_PATH: $RUNNER_TEMP/ledfx-rust-release-key.jks
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: android
 
       - name: Rename Android Artifacts
         run: |
-          # When signed, the '-unsigned' suffix is removed from the APK name
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
           mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/ledfx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
 
@@ -179,7 +188,6 @@ jobs:
           path: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
-
   # --- JOB 4: Build for iOS ---
   build-ios:
     name: Build iOS IPA
