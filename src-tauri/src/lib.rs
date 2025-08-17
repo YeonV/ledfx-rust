@@ -1,6 +1,6 @@
-// src-tauri/src/lib.rs
+mod wled;
+mod effects;
 
-// --- NEW: Define your command here, in the library ---
 #[tauri::command]
 fn ping() -> String {
     "pong from Rust!".to_string()
@@ -15,10 +15,11 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        // --- THE FIX: Register ALL your commands here ---
         .invoke_handler(tauri::generate_handler![
             greet,
-            ping // Add the new command to the list
+            ping,
+            wled::discover_wled,
+            effects::toggle_ddp_effect
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
