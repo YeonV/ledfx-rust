@@ -4,8 +4,7 @@ version = "0.0.1"
 description = "A Tauri App"
 authors = ["YeonV", "Blade"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# build = "build.rs" <-- MAKE SURE THIS LINE IS DELETED
 
 [lib]
 name = "ledfx_rust_lib"
@@ -13,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# All specta dependencies are removed from here
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -21,7 +21,12 @@ mdns-sd = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 lazy_static = "1.5.0"
-tokio = { version = "1.47.1", features = ["full"] }
-reqwest = { version = "0.12.23", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 cpal = "0.16.0"
-rustfft ="6.4.0"
+rustfft = "6.4.0"
+
+# --- THE FIX: The correct dependencies for the new API ---
+specta = { version = "2.0.0-rc.22", features = ["serde"] }
+tauri-specta = { version = "2.0.0-rc.21", features = ["typescript"] }
+specta-typescript = "0.0.9"

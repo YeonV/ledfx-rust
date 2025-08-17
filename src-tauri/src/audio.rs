@@ -3,7 +3,15 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
+use specta::Type;
+// use tauri::State; // <-- REMOVED
+
+#[derive(Serialize, Clone, Type)]
+pub struct AudioDevice {
+    pub name: String,
+}
 
 #[derive(Default, Clone)]
 pub struct AudioAnalysisData {
@@ -12,6 +20,18 @@ pub struct AudioAnalysisData {
 
 #[derive(Default)]
 pub struct SharedAudioData(pub Arc<Mutex<AudioAnalysisData>>);
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
+    let host = cpal::default_host();
+    let devices = host.input_devices().map_err(|e| e.to_string())?;
+    let device_list: Vec<AudioDevice> = devices
+        .filter_map(|d| d.name().ok())
+        .map(|name| AudioDevice { name })
+        .collect();
+    Ok(device_list)
+}
 
 pub fn run_audio_capture(audio_data: Arc<Mutex<AudioAnalysisData>>) {
     let host = cpal::default_host();
@@ -29,10 +49,8 @@ pub fn run_audio_capture(audio_data: Arc<Mutex<AudioAnalysisData>>) {
     let stream = device.build_input_stream(
         &config.into(),
         move |data: &[f32], _: &cpal::InputCallbackInfo| {
-            // --- THE FIX: FFT size must be <= the incoming data size. ---
             const FFT_SIZE: usize = 256;
-            const GAIN: f32 = 30.0; // Increased gain slightly for more reactivity
-
+            const GAIN: f32 = 30.0;
             if data.len() < FFT_SIZE { return; }
 
             let mut planner = FftPlanner::new();
@@ -52,11 +70,6 @@ pub fn run_audio_capture(audio_data: Arc<Mutex<AudioAnalysisData>>) {
             let magnitudes: Vec<f32> = buffer.iter().map(|c| c.norm()).collect();
             let sum: f32 = magnitudes.iter().sum();
             let volume = (sum / FFT_SIZE as f32 * GAIN).min(1.0);
-
-            // Only log if the volume is significant to avoid spam.
-            // if volume > 0.01 {
-            //     println!("AUDIO THREAD: Calculated Volume = {:.4}", volume);
-            // }
 
             let mut analysis_data = audio_data.lock().unwrap();
             analysis_data.volume = volume;

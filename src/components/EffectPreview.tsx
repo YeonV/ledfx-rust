@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
 import { useFrameStore } from '../store/frameStore';
-import { invoke } from '@tauri-apps/api/core';
+import { commands } from '../bindings';
 
 interface EffectPreviewProps {
   ipAddress: string;
@@ -14,8 +14,7 @@ export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    // When the component mounts, tell the backend we are interested in this IP.
-    invoke('subscribe_to_frames', { ipAddress });
+    commands.subscribeToFrames(ipAddress);
     console.log(`Subscribed to frames for ${ipAddress}`);
 
     const canvas = canvasRef.current;
@@ -63,11 +62,9 @@ export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
       }
     );
 
-    // The cleanup function
     return () => {
       unsubscribeFromStore();
-      // Tell the backend we are no longer interested in this IP.
-      invoke('unsubscribe_from_frames', { ipAddress });
+      commands.unsubscribeFromFrames(ipAddress);
       console.log(`Unsubscribed from frames for ${ipAddress}`);
     };
   }, [active, ipAddress]);

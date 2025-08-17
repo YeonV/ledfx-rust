@@ -10,34 +10,20 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{State, AppHandle, Emitter};
 
-// --- The Engine's Internal State ---
 struct ActiveEffect {
     led_count: u32,
     effect: Box<dyn Effect>,
 }
 
-// --- Engine Commands (Message Passing) ---
 pub enum EngineCommand {
-    StartEffect {
-        ip_address: String,
-        led_count: u32,
-        effect_id: String,
-    },
-    StopEffect {
-        ip_address: String,
-    },
-    Subscribe {
-        ip_address: String,
-    },
-    Unsubscribe {
-        ip_address: String,
-    },
-    SetTargetFps {
-        fps: u64,
-    },
+    StartEffect { ip_address: String, led_count: u32, effect_id: String },
+    StopEffect { ip_address: String },
+    Subscribe { ip_address: String },
+    Unsubscribe { ip_address: String },
+    // --- THE FIX: Change the type here to u32 ---
+    SetTargetFps { fps: u32 },
 }
 
-// --- The Engine's Main Loop ---
 pub fn run_effect_engine(
     command_rx: mpsc::Receiver<EngineCommand>,
     audio_data: State<SharedAudioData>,
@@ -48,15 +34,13 @@ pub fn run_effect_engine(
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     let mut frame_count: u8 = 0;
     let mut latest_frames: HashMap<String, Vec<u8>> = HashMap::new();
-    let mut target_frame_duration = Duration::from_millis(1000 / 60); // Default 60 FPS
+    let mut target_frame_duration = Duration::from_millis(1000 / 60);
 
     loop {
         let frame_start = Instant::now();
-
         while let Ok(command) = command_rx.try_recv() {
             match command {
                 EngineCommand::StartEffect { ip_address, led_count, effect_id } => {
-                    println!("ENGINE: Starting effect '{}' for {}", effect_id, ip_address);
                     let effect: Box<dyn Effect> = match effect_id.as_str() {
                         "scan" => Box::new(ScanEffect { position: 0, color: [255, 0, 0] }),
                         "scroll" => Box::new(ScrollEffect { hue: 0.0 }),
@@ -66,7 +50,6 @@ pub fn run_effect_engine(
                     active_effects.insert(ip_address, ActiveEffect { led_count, effect });
                 }
                 EngineCommand::StopEffect { ip_address } => {
-                    println!("ENGINE: Stopping effect for {}", ip_address);
                     if active_effects.remove(&ip_address).is_some() {
                         let black_data = vec![0; 300 * 3];
                         let destination = format!("{}:4048", ip_address);
@@ -74,16 +57,12 @@ pub fn run_effect_engine(
                         latest_frames.remove(&ip_address);
                     }
                 }
-                EngineCommand::Subscribe { ip_address } => {
-                    subscribed_ips.insert(ip_address);
-                }
-                EngineCommand::Unsubscribe { ip_address } => {
-                    subscribed_ips.remove(&ip_address);
-                }
+                EngineCommand::Subscribe { ip_address } => { subscribed_ips.insert(ip_address); }
+                EngineCommand::Unsubscribe { ip_address } => { subscribed_ips.remove(&ip_address); }
                 EngineCommand::SetTargetFps { fps } => {
-                    println!("ENGINE: Setting Target FPS to {}", fps);
                     if fps > 0 {
-                        target_frame_duration = Duration::from_millis(1000 / fps);
+                        // --- THE FIX: Cast the u32 to u64 for the Duration function ---
+                        target_frame_duration = Duration::from_millis(fps as u64);
                     }
                 }
             }
@@ -99,15 +78,12 @@ pub fn run_effect_engine(
             latest_frames.insert(ip.clone(), data);
         }
 
-        let payload: HashMap<String, Vec<u8>> = latest_frames
-            .iter()
+        let payload: HashMap<String, Vec<u8>> = latest_frames.iter()
             .filter(|(ip, _)| subscribed_ips.contains(*ip))
             .map(|(ip, data)| (ip.clone(), data.clone()))
             .collect();
 
-        if !payload.is_empty() {
-            app_handle.emit("engine-tick", &payload).unwrap();
-        }
+        if !payload.is_empty() { app_handle.emit("engine-tick", &payload).unwrap(); }
 
         let frame_duration = frame_start.elapsed();
         if let Some(sleep_duration) = target_frame_duration.checked_sub(frame_duration) {
@@ -116,50 +92,39 @@ pub fn run_effect_engine(
     }
 }
 
-// --- Tauri Commands ---
 #[tauri::command]
-pub fn start_effect(
-    ip_address: String,
-    led_count: u32,
-    effect_id: String,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
-) -> Result<(), String> {
+#[specta::specta]
+pub fn start_effect(ip_address: String, led_count: u32, effect_id: String, command_tx: State<mpsc::Sender<EngineCommand>>) -> Result<(), String> {
     command_tx.send(EngineCommand::StartEffect { ip_address, led_count, effect_id }).unwrap();
     Ok(())
 }
 
 #[tauri::command]
-pub fn stop_effect(
-    ip_address: String,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
-) -> Result<(), String> {
+#[specta::specta]
+pub fn stop_effect(ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>) -> Result<(), String> {
     command_tx.send(EngineCommand::StopEffect { ip_address }).unwrap();
     Ok(())
 }
 
 #[tauri::command]
-pub fn subscribe_to_frames(
-    ip_address: String,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
-) -> Result<(), String> {
+#[specta::specta]
+pub fn subscribe_to_frames(ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>) -> Result<(), String> {
     command_tx.send(EngineCommand::Subscribe { ip_address }).unwrap();
     Ok(())
 }
 
 #[tauri::command]
-pub fn unsubscribe_from_frames(
-    ip_address: String,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
-) -> Result<(), String> {
+#[specta::specta]
+pub fn unsubscribe_from_frames(ip_address: String, command_tx: State<mpsc::Sender<EngineCommand>>) -> Result<(), String> {
     command_tx.send(EngineCommand::Unsubscribe { ip_address }).unwrap();
     Ok(())
 }
 
 #[tauri::command]
-pub fn set_target_fps(
-    fps: u64,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
-) -> Result<(), String> {
+#[specta::specta]
+// --- THE FIX: The input is u32 ---
+pub fn set_target_fps(fps: u32, command_tx: State<mpsc::Sender<EngineCommand>>) -> Result<(), String> {
+    // --- THE FIX: The command now sends a u32, no cast needed ---
     command_tx.send(EngineCommand::SetTargetFps { fps }).unwrap();
     Ok(())
 }

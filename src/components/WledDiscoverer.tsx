@@ -1,16 +1,19 @@
 // src/components/WledDiscoverer.tsx
 
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { DeviceCard } from './DeviceCard';
-import { WledDevice } from '../types/wled';
+import { commands } from '../bindings';
+import type { WledDevice, AudioDevice } from '../bindings';
 
 import {
-  Box, Grid, LinearProgress, Stack, TextField, Alert, Slider, Typography
+  Box, Grid, LinearProgress, Stack, TextField, Alert, Slider, Typography,
+  Card, CardHeader, FormControl, InputLabel, Select, MenuItem,
+  CardContent
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 import SearchIcon from '@mui/icons-material/Search';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 export function WledDiscoverer() {
   const [devices, setDevices] = useState<WledDevice[]>([]);
@@ -20,8 +23,18 @@ export function WledDiscoverer() {
   const [activeEffects, setActiveEffects] = useState<Record<string, boolean>>({});
   const [selectedEffects, setSelectedEffects] = useState<Record<string, string>>({});
   const [targetFps, setTargetFps] = useState(60);
+  const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
 
   useEffect(() => {
+    // --- THE FIX: Handle the Result type ---
+    commands.getAudioDevices().then(result => {
+      if (result.status === 'ok') {
+        setAudioDevices(result.data);
+      } else {
+        console.error(result.error);
+      }
+    });
+
     const unlistenPromise = listen<WledDevice>('wled-device-found', (event) => {
       const foundDevice = event.payload;
       setDevices((prev) => !prev.some(d => d.ip_address === foundDevice.ip_address) ? [...prev, foundDevice] : prev);
@@ -31,12 +44,9 @@ export function WledDiscoverer() {
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      console.log(`Setting backend FPS to: ${targetFps}`);
-      invoke('set_target_fps', { fps: targetFps }).catch(console.error);
+      commands.setTargetFps(targetFps).catch(console.error);
     }, 500);
-    return () => {
-      clearTimeout(handler);
-    };
+    return () => clearTimeout(handler);
   }, [targetFps]);
 
   const handleDiscover = async () => {
@@ -44,7 +54,7 @@ export function WledDiscoverer() {
     setError(null);
     setDevices([]);
     try {
-      await invoke('discover_wled', { durationSecs: duration });
+      await commands.discoverWled(duration);
       setTimeout(() => setIsScanning(false), duration * 1000);
     } catch (err) {
       setError(err as string);
@@ -56,32 +66,25 @@ export function WledDiscoverer() {
     setSelectedEffects(prev => ({ ...prev, [device.ip_address]: newEffectId }));
     const isCurrentlyActive = activeEffects[device.ip_address] || false;
     if (isCurrentlyActive) {
-      invoke('start_effect', {
-        ipAddress: device.ip_address,
-        ledCount: device.leds.count,
-        effectId: newEffectId,
-      }).catch(err => {
-        console.error("Failed to switch effect:", err);
-        setActiveEffects(prev => ({ ...prev, [device.ip_address]: false }));
-      });
+      commands.startEffect(device.ip_address, device.leds.count, newEffectId)
+        .catch(err => {
+          console.error("Failed to switch effect:", err);
+          setActiveEffects(prev => ({ ...prev, [device.ip_address]: false }));
+        });
     }
   }, [activeEffects]);
 
   const handleStartEffect = useCallback(async (device: WledDevice) => {
     const effectId = selectedEffects[device.ip_address] || 'rainbow';
     try {
-      await invoke('start_effect', {
-        ipAddress: device.ip_address,
-        ledCount: device.leds.count,
-        effectId: effectId,
-      });
+      await commands.startEffect(device.ip_address, device.leds.count, effectId);
       setActiveEffects(prev => ({ ...prev, [device.ip_address]: true }));
     } catch (err) { console.error("Failed to start effect:", err); }
   }, [selectedEffects]);
 
   const handleStopEffect = useCallback(async (ip: string) => {
     try {
-      await invoke('stop_effect', { ipAddress: ip });
+      await commands.stopEffect(ip);
       setActiveEffects(prev => ({ ...prev, [ip]: false }));
     } catch (err) { console.error("Failed to stop effect:", err); }
   }, []);
@@ -115,6 +118,26 @@ export function WledDiscoverer() {
           max={120}
         />
       </Box>
+
+      <Card variant="outlined" sx={{ mb: 2 }}>
+        <CardHeader
+          avatar={<SettingsIcon />}
+          title="Audio Settings"
+          subheader="Select your audio input device"
+        />
+        <CardContent>
+          <FormControl fullWidth size="small">
+            <InputLabel>Audio Device</InputLabel>
+            <Select label="Audio Device" value={audioDevices[0]?.name || ''}>
+              {audioDevices.map((device) => (
+                <MenuItem key={device.name} value={device.name}>
+                  {device.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </CardContent>
+      </Card>
 
       {isScanning && <LinearProgress sx={{ mb: 2 }} />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
