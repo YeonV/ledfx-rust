@@ -14,9 +14,10 @@ use specta_typescript::Typescript;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // --- THE FIX: Use the correct paths from the new audio sub-modules ---
     let (engine_command_tx, engine_command_rx) = mpsc::channel::<engine::EngineCommand>();
-    let (audio_command_tx, audio_command_rx) = mpsc::channel::<audio::AudioCommand>();
-    let audio_data = audio::SharedAudioData::default();
+    let (audio_command_tx, audio_command_rx) = mpsc::channel::<audio::capture::AudioCommand>();
+    let audio_data = audio::capture::SharedAudioData::default();
     let audio_data_clone_for_thread = audio_data.0.clone();
 
     let builder = {
@@ -28,8 +29,9 @@ pub fn run() {
                 engine::subscribe_to_frames,
                 engine::unsubscribe_from_frames,
                 engine::set_target_fps,
-                audio::get_audio_devices,
-                audio::set_audio_device
+                // --- THE FIX: Use the correct paths for the commands ---
+                audio::devices::get_audio_devices,
+                audio::devices::set_audio_device
             ])
             .typ::<wled::WledDevice>()
             .typ::<wled::LedsInfo>()
@@ -56,12 +58,14 @@ pub fn run() {
             let engine_handle = app.handle().clone();
 
             thread::spawn(move || {
-                let audio_data_state = state_handle.state::<audio::SharedAudioData>();
+                // --- THE FIX: Use the correct path for the State type ---
+                let audio_data_state = state_handle.state::<audio::capture::SharedAudioData>();
                 engine::run_effect_engine(engine_command_rx, audio_data_state, engine_handle);
             });
 
             thread::spawn(move || {
-                audio::run_audio_capture(audio_command_rx, audio_data_clone_for_thread);
+                // --- THE FIX: Use the correct path for the function ---
+                audio::capture::run_audio_capture(audio_command_rx, audio_data_clone_for_thread);
             });
 
             Ok(())

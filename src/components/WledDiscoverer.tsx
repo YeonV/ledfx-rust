@@ -4,17 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { DeviceCard } from './DeviceCard';
 import { commands } from '../bindings';
-import type { WledDevice, AudioDevice } from '../bindings';
+import type { WledDevice } from '../bindings';
+import { ScanControls } from './controls/ScanControls';
+import { EngineControls } from './controls/EngineControls';
+import { AudioSettings } from './controls/AudioSettings';
 
-import {
-  Box, Grid, LinearProgress, Stack, TextField, Alert, Slider, Typography,
-  Card, CardHeader, FormControl, InputLabel, Select, MenuItem,
-  CardContent,
-  SelectChangeEvent
-} from '@mui/material';
-import { LoadingButton } from '@mui/lab';
-import SearchIcon from '@mui/icons-material/Search';
-import SettingsIcon from '@mui/icons-material/Settings';
+import { Box, Grid, LinearProgress, Alert } from '@mui/material';
 
 export function WledDiscoverer() {
   const [devices, setDevices] = useState<WledDevice[]>([]);
@@ -23,44 +18,14 @@ export function WledDiscoverer() {
   const [duration, setDuration] = useState(10);
   const [activeEffects, setActiveEffects] = useState<Record<string, boolean>>({});
   const [selectedEffects, setSelectedEffects] = useState<Record<string, string>>({});
-  const [targetFps, setTargetFps] = useState(60);
-  const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
-  const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
 
-useEffect(() => {
-    commands.getAudioDevices().then(result => {
-      if (result.status === 'ok') {
-        setAudioDevices(result.data);
-        // Set the default device to the first one in the list
-        if (result.data.length > 0) {
-          setSelectedAudioDevice(result.data[0].name);
-        }
-      } else {
-        console.error(result.error);
-      }
-    });
-
+  useEffect(() => {
     const unlistenPromise = listen<WledDevice>('wled-device-found', (event) => {
       const foundDevice = event.payload;
       setDevices((prev) => !prev.some(d => d.ip_address === foundDevice.ip_address) ? [...prev, foundDevice] : prev);
     });
     return () => { unlistenPromise.then(unlisten => unlisten()); };
   }, []);
-
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      commands.setTargetFps(targetFps).catch(console.error);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [targetFps]);
-
-  const handleAudioDeviceChange = (event: SelectChangeEvent<string>) => {
-    const deviceName = event.target.value;
-    setSelectedAudioDevice(deviceName);
-    commands.setAudioDevice(deviceName).catch(console.error);
-  };
-
 
   const handleDiscover = async () => {
     setIsScanning(true);
@@ -104,57 +69,14 @@ useEffect(() => {
 
   return (
     <Box sx={{ width: '100%', p: 2 }}>
-      <Stack spacing={2} direction="row" alignItems="center" sx={{ mb: 2 }}>
-        <TextField
-          label="Scan Duration (s)" type="number" value={duration}
-          onChange={(e) => setDuration(Number(e.target.value))}
-          disabled={isScanning} size="small"
-        />
-        <LoadingButton
-          onClick={handleDiscover} loading={isScanning} loadingPosition="start"
-          startIcon={<SearchIcon />} variant="contained"
-        >
-          {isScanning ? 'Scanning...' : 'Discover'}
-        </LoadingButton>
-      </Stack>
-
-      <Box sx={{ width: 300, mb: 2 }}>
-        <Typography gutterBottom>Target FPS: {targetFps}</Typography>
-        <Slider
-          value={targetFps}
-          onChange={(_e, newValue) => setTargetFps(newValue as number)}
-          aria-labelledby="target-fps-slider"
-          valueLabelDisplay="auto"
-          step={5}
-          marks
-          min={10}
-          max={120}
-        />
-      </Box>
-
-        <Card variant="outlined" sx={{ mb: 2 }}>
-        <CardHeader
-          avatar={<SettingsIcon />}
-          title="Audio Settings"
-          subheader="Select your audio input device (Restart required)"
-        />
-        <CardContent>
-          <FormControl fullWidth size="small">
-            <InputLabel>Audio Device</InputLabel>
-            <Select
-              label="Audio Device"
-              value={selectedAudioDevice}
-              onChange={handleAudioDeviceChange}
-            >
-              {audioDevices.map((device) => (
-                <MenuItem key={device.name} value={device.name}>
-                  {device.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </CardContent>
-      </Card>
+      <ScanControls
+        duration={duration}
+        onDurationChange={setDuration}
+        onDiscover={handleDiscover}
+        isScanning={isScanning}
+      />
+      <EngineControls />
+      <AudioSettings />
 
       {isScanning && <LinearProgress sx={{ mb: 2 }} />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
