@@ -149,8 +149,11 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      - name: Setup Android SDK & NDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r25b
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
@@ -167,6 +170,7 @@ jobs:
           if (typeof newVersion !== 'string' || newVersion.length < 3) {
             throw new Error(`Failed to read a valid version from package.json. Got: ${newVersion}`);
           }
+          console.log(`Syncing all files to version: ${newVersion}`);
           const tauriConfPath = './src-tauri/tauri.conf.json';
           let tauriConf = fs.readFileSync(tauriConfPath, 'utf8');
           tauriConf = tauriConf.replace(/"version": "0.0.1"/, `"version": "${newVersion}"`);
@@ -186,32 +190,11 @@ jobs:
             -storepass 000000 \
             -keypass 000000 \
             -dname "CN=0,O=0,C=00"
-      - name: Create Cargo Config for Android
-        run: |
-          mkdir -p src-tauri/.cargo
-          cat <<EOF > src-tauri/.cargo/config.toml
-          [target.aarch64-linux-android]
-          linker = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
-          ar = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar"
-          rustflags = ["-L", "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/24"]
-
-          [target.armv7-linux-androideabi]
-          linker = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang"
-          ar = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/arm-linux-androideabi-ar"
-          rustflags = ["-L", "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/24"]
-
-          [target.i686-linux-android]
-          linker = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang"
-          ar = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android-ar"
-          rustflags = ["-L", "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/24"]
-
-          [target.x86_64-linux-android]
-          linker = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"
-          ar = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android-ar"
-          rustflags = ["-L", "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/24"]
-          EOF
       - name: Initialize Android project
         run: yarn tauri android init
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Setup Android Signing
         run: |
           cd src-tauri/gen/android
@@ -222,8 +205,29 @@ jobs:
           cd ../../..
       - name: Generate Icon
         run: yarn tauri icon
+      # --- THE FINAL FIX: Create the Cargo config with ONLY the library search paths ---
+      - name: Create Cargo Config for Android
+        run: |
+          mkdir -p src-tauri/.cargo
+          NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
+          cat <<EOF > src-tauri/.cargo/config.toml
+          [target.aarch64-linux-android]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/24"]
+
+          [target.armv7-linux-androideabi]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/24"]
+
+          [target.i686-linux-android]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/24"]
+
+          [target.x86_64-linux-android]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/24"]
+          EOF
       - name: Build Signed Android Project
         run: yarn tauri android build
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Rename Android Artifacts
         run: |
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
