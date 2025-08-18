@@ -25,8 +25,9 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 cpal = "0.16.0"
 rustfft = "6.4.0"
-
-# --- THE FIX: The correct dependencies for the new API ---
 specta = { version = "2.0.0-rc.22", features = ["serde"] }
 tauri-specta = { version = "2.0.0-rc.21", features = ["typescript"] }
 specta-typescript = "0.0.9"
+
+[package.metadata.android]
+min_sdk_version = 26
