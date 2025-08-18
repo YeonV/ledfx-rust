@@ -1,6 +1,6 @@
 // src-tauri/src/audio/capture.rs
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{Device, Stream, SupportedStreamConfig};
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
