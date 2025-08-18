@@ -10,6 +10,8 @@ use std::sync::mpsc;
 use std::thread;
 use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
+
+#[cfg(debug_assertions)]
 use specta_typescript::Typescript;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
