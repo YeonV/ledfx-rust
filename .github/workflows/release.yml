@@ -149,7 +149,6 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      # --- THE FIX: Use the comprehensive android-actions setup ---
       - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
       - name: Install frontend dependencies
@@ -187,7 +186,6 @@ jobs:
             -storepass 000000 \
             -keypass 000000 \
             -dname "CN=0,O=0,C=00"
-      # --- THE FIX: Create the Cargo config using the reliable NDK_HOME env var ---
       - name: Create Cargo Config for Android
         run: |
           mkdir -p src-tauri/.cargo
