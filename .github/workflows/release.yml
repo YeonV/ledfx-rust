@@ -205,23 +205,23 @@ jobs:
           cd ../../..
       - name: Generate Icon
         run: yarn tauri icon
-      # --- THE FINAL FIX: Create the Cargo config with ONLY the library search paths ---
+      # --- THE FINAL FIX: Create the Cargo config with the library search paths ---
       - name: Create Cargo Config for Android
         run: |
           mkdir -p src-tauri/.cargo
           NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
           cat <<EOF > src-tauri/.cargo/config.toml
           [target.aarch64-linux-android]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/24"]
+          rustflags = ["-L", "$NDK_PATH/platforms/android-24/arch-arm64/usr/lib"]
 
           [target.armv7-linux-androideabi]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/24"]
+          rustflags = ["-L", "$NDK_PATH/platforms/android-24/arch-arm/usr/lib"]
 
           [target.i686-linux-android]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/24"]
+          rustflags = ["-L", "$NDK_PATH/platforms/android-24/arch-x86/usr/lib"]
 
           [target.x86_64-linux-android]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/24"]
+          rustflags = ["-L", "$NDK_PATH/platforms/android-24/arch-x86_64/usr/lib"]
           EOF
       - name: Build Signed Android Project
         run: yarn tauri android build
