@@ -204,29 +204,23 @@ jobs:
           cd ../../..
       - name: Generate Icon
         run: yarn tauri icon
-      # --- STEP 1: FIND THE PROOF ---
-      - name: Debug - Find libaaudio.so
-        run: |
-          echo "Searching for libaaudio.so in the NDK..."
-          find ${{ steps.setup-ndk.outputs.ndk-path }} -name "libaaudio.so"
-      # --- STEP 2: THE FINAL FIX ---
+      # --- THE FINAL FIX: Create the Cargo config with the CORRECT library search paths ---
       - name: Create Cargo Config for Android
         run: |
           mkdir -p src-tauri/.cargo
           NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
-          # This is the correct path structure for NDK r25b libraries
           cat <<EOF > src-tauri/.cargo/config.toml
           [target.aarch64-linux-android]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/24"]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"]
 
           [target.armv7-linux-androideabi]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/24"]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"]
 
           [target.i686-linux-android]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/24"]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/26"]
 
           [target.x86_64-linux-android]
-          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/24"]
+          rustflags = ["-L", "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/26"]
           EOF
       - name: Build Signed Android Project
         run: yarn tauri android build
