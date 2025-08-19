@@ -21,32 +21,17 @@ pub fn run() {
     let audio_data_clone_for_thread = audio_data.0.clone();
 
     let builder = {
-        let mut builder = Builder::<tauri::Wry>::new()
+        let builder = Builder::<tauri::Wry>::new()
             .commands(collect_commands![
                 wled::discover_wled,
                 engine::start_effect,
                 engine::stop_effect,
                 engine::subscribe_to_frames,
                 engine::unsubscribe_from_frames,
-                engine::set_target_fps
-            ]);
-
-        // --- THE FIX: Conditionally add commands using their direct, physical path ---
-        #[cfg(not(target_os = "android"))]
-        {
-            builder = builder.commands(collect_commands![
-                audio::desktop::get_audio_devices,
-                audio::desktop::set_audio_device
-            ]);
-        }
-        #[cfg(target_os = "android")]
-        {
-            builder = builder.commands(collect_commands![
-                audio::android::get_audio_devices
-            ]);
-        }
-
-        let builder = builder
+                engine::set_target_fps,
+                audio::get_audio_devices,
+                audio::set_audio_device
+            ])
             .typ::<wled::WledDevice>()
             .typ::<wled::LedsInfo>()
             .typ::<wled::MapInfo>()
@@ -77,7 +62,6 @@ pub fn run() {
             engine::run_effect_engine(engine_command_rx, audio_data_state, engine_handle);
         });
 
-        // --- THE FIX: This call now works because of the clean API from mod.rs ---
         thread::spawn(move || {
             audio::start_audio_capture(audio_command_rx, audio_data_clone_for_thread);
         });

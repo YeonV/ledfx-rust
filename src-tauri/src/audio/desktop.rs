@@ -4,19 +4,13 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream, SupportedStreamConfig};
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
-use serde::Serialize;
 use std::sync::{mpsc, Arc, Mutex};
-use specta::Type;
 use tauri::State;
-use super::{AudioAnalysisData, AudioDevice};
+use super::{AudioAnalysisData, AudioDevice, AudioCommand};
 
-pub enum AudioCommand {
-    ChangeDevice(String),
-}
+// --- Public functions that are called by mod.rs ---
 
-#[tauri::command]
-#[specta::specta]
-pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
+pub fn get_desktop_devices() -> Result<Vec<AudioDevice>, String> {
     let host = cpal::default_host();
     let mut device_list: Vec<AudioDevice> = Vec::new();
     if let Ok(devices) = host.input_devices() {
@@ -40,18 +34,14 @@ pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
     Ok(device_list)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn set_audio_device(
+pub fn set_desktop_device(
     device_name: String,
     command_tx: State<mpsc::Sender<AudioCommand>>,
 ) -> Result<(), String> {
-    command_tx.send(AudioCommand::ChangeDevice(device_name)).map_err(|e| e.to_string())?;
-    Ok(())
+    command_tx.send(AudioCommand::ChangeDevice(device_name)).map_err(|e| e.to_string())
 }
 
-// --- THE FIX: This function is now public ---
-pub fn start_audio_capture(
+pub fn run_desktop_capture(
     command_rx: mpsc::Receiver<AudioCommand>,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
 ) {
@@ -79,6 +69,8 @@ pub fn start_audio_capture(
         }
     }
 }
+
+// --- Private helper functions ---
 
 fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Device {
     if is_loopback {

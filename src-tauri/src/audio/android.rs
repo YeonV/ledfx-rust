@@ -1,19 +1,19 @@
 // src-tauri/src/audio/android.rs
 
-use jni::objects::{JClass};
+use jni::objects::{JClass, JByteArray};
 use jni::JNIEnv;
-use jni::sys::{jbyteArray, jint};
+use jni::sys::{jint};
 use once_cell::sync::Lazy;
-use serde::Serialize;
-use specta::Type;
 use std::sync::{mpsc, Arc, Mutex};
+use tauri::State;
 use super::{AudioAnalysisData, AudioDevice, AudioCommand};
 
 static SHARED_AUDIO_DATA: Lazy<Arc<Mutex<AudioAnalysisData>>> = Lazy::new(Default::default);
 
-// --- THE FIX: The function now has the same signature as the desktop version ---
+// --- Public functions that are called by mod.rs ---
+
 pub fn start_audio_capture(
-    _command_rx: mpsc::Receiver<AudioCommand>, // This is ignored on Android
+    _command_rx: mpsc::Receiver<AudioCommand>,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
 ) {
     let mut global_data = SHARED_AUDIO_DATA.lock().unwrap();
@@ -21,12 +21,26 @@ pub fn start_audio_capture(
     println!("ANDROID AUDIO: Native capture thread started (simulated).");
 }
 
+pub fn get_android_devices() -> Result<Vec<AudioDevice>, String> {
+    Ok(vec![AudioDevice { name: "System Audio (Native)".to_string() }])
+}
+
+pub fn set_android_device(
+    _device_name: String,
+    _command_tx: State<mpsc::Sender<AudioCommand>>,
+) -> Result<(), String> {
+    println!("set_audio_device is a no-op on Android.");
+    Ok(())
+}
+
+// --- JNI Function ---
+
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onFftDataCapture(
     env: JNIEnv,
     _class: JClass,
-    fft: jbyteArray,
+    fft: JByteArray,
     _sampling_rate: jint,
 ) {
     let fft_bytes = env.convert_byte_array(fft).unwrap();
@@ -36,10 +50,4 @@ pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onFftDataCapture
     let volume = (sum / magnitudes.len() as f32 * GAIN).min(1.0);
     let mut analysis_data = SHARED_AUDIO_DATA.lock().unwrap();
     analysis_data.volume = volume;
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
-    Ok(vec![AudioDevice { name: "System Audio (Native)".to_string() }])
 }

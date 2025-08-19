@@ -28,6 +28,7 @@ rustfft = "6.4.0"
 specta = { version = "2.0.0-rc.22", features = ["serde"] }
 tauri-specta = { version = "2.0.0-rc.21", features = ["typescript"] }
 specta-typescript = "0.0.9"
+once_cell = "1.19.0"
 
 [target.'cfg(target_os = "android")'.dependencies]
-jni = "0.21.1"
+jni = { version = "0.21.1", features = ["invocation"] }
