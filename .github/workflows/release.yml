@@ -149,7 +149,6 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      # --- THE FIX: Use the correct option from the documentation ---
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
@@ -196,24 +195,23 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      - name: Setup Android Signing
-        run: |
-          cd src-tauri/gen/android
-          echo "keyAlias=0" > keystore.properties
-          echo "password=000000" >> keystore.properties
-          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
-          echo "Keystore properties created."
-          cd ../../..
       - name: Generate Icon
         run: yarn tauri icon
-      - name: Build Signed Android Project
+      - name: Build Unsigned Android Project
         run: yarn tauri android build
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Sign the APK with apksigner
+        run: |
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -r | head -n 1)
+          echo "Using apksigner at: $APKSIGNER"
+          $APKSIGNER sign --ks $RUNNER_TEMP/keystore.jks --ks-pass pass:000000 \
+          src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
       - name: Rename Android Artifacts
         run: |
-          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
+          # --- MODIFIED: Rename the now-signed APK ---
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
           mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
       - name: Upload APK and AAB Artifacts
         uses: actions/upload-artifact@v4
