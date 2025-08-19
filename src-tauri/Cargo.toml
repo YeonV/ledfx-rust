@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "A Tauri App"
 authors = ["YeonV", "Blade"]
 edition = "2021"
-# build = "build.rs" <-- MAKE SURE THIS LINE IS DELETED
+# build = "build.rs"
 
 [lib]
 name = "ledfx_rust_lib"
@@ -29,5 +29,5 @@ specta = { version = "2.0.0-rc.22", features = ["serde"] }
 tauri-specta = { version = "2.0.0-rc.21", features = ["typescript"] }
 specta-typescript = "0.0.9"
 
-[package.metadata.android]
-min_sdk_version = 26
+# [target.'cfg(target_os = "android")'.dependencies]
+# jni = "0.21.1"
