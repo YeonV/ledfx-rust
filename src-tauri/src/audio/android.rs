@@ -6,14 +6,14 @@ use jni::sys::{jint};
 use once_cell::sync::Lazy;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
-use super::{AudioAnalysisData, AudioDevice};
+use super::{AudioAnalysisData, AudioDevice, AudioCommand};
 use cpal::traits::{DeviceTrait, HostTrait};
 
 static SHARED_AUDIO_DATA: Lazy<Arc<Mutex<AudioAnalysisData>>> = Lazy::new(Default::default);
 
-pub enum AudioCommand {}
+// --- Public functions that are called by mod.rs ---
 
-pub fn start_audio_capture(
+pub fn run_android_capture(
     _command_rx: mpsc::Receiver<AudioCommand>,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
 ) {
@@ -21,6 +21,31 @@ pub fn start_audio_capture(
     *global_data = audio_data.lock().unwrap().clone();
     println!("ANDROID AUDIO: Native capture thread started (simulated).");
 }
+
+pub fn get_android_devices() -> Result<Vec<AudioDevice>, String> {
+    let mut device_list: Vec<AudioDevice> = Vec::new();
+    device_list.push(AudioDevice { name: "System Audio (Native Visualizer)".to_string() });
+
+    let host = cpal::default_host();
+    if let Ok(devices) = host.input_devices() {
+        for device in devices {
+            if let Ok(name) = device.name() {
+                device_list.push(AudioDevice { name });
+            }
+        }
+    }
+    Ok(device_list)
+}
+
+pub fn set_android_device(
+    _device_name: String,
+    _command_tx: State<mpsc::Sender<AudioCommand>>,
+) -> Result<(), String> {
+    println!("set_audio_device on Android will select between Native and CPAL in the future.");
+    Ok(())
+}
+
+// --- JNI Function ---
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -37,31 +62,4 @@ pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onFftDataCapture
     let volume = (sum / magnitudes.len() as f32 * GAIN).min(1.0);
     let mut analysis_data = SHARED_AUDIO_DATA.lock().unwrap();
     analysis_data.volume = volume;
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
-    let mut device_list: Vec<AudioDevice> = Vec::new();
-    device_list.push(AudioDevice { name: "System Audio (Native Visualizer)".to_string() });
-
-    let host = cpal::default_host();
-    if let Ok(devices) = host.input_devices() {
-        for device in devices {
-            if let Ok(name) = device.name() {
-                device_list.push(AudioDevice { name });
-            }
-        }
-    }
-    Ok(device_list)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn set_audio_device(
-    _device_name: String,
-    _command_tx: State<mpsc::Sender<AudioCommand>>,
-) -> Result<(), String> {
-    println!("set_audio_device on Android will select between Native and CPAL in the future.");
-    Ok(())
 }
