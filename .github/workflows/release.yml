@@ -195,6 +195,15 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Inject Android Permissions
+        run: |
+          MANIFEST_PATH="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+          PERMISSIONS='<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
+          sed -i "/<\/application>/a \    ${PERMISSIONS}" $MANIFEST_PATH
+          echo "--- Patched AndroidManifest.xml ---"
+          cat $MANIFEST_PATH
+          echo "---------------------------------"
       - name: Copy Native Source
         run: cp android-native/AudioVisualizer.kt src-tauri/gen/android/app/src/main/java/com/blade/ledfx_rust/
       - name: Generate Icon

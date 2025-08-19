@@ -6,11 +6,15 @@ use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
-use super::{AudioAnalysisData, AudioDevice, AudioCommand};
+use super::{AudioAnalysisData, AudioDevice};
 
-// --- Public functions that are called by mod.rs ---
+pub enum AudioCommand {
+    ChangeDevice(String),
+}
 
-pub fn get_desktop_devices() -> Result<Vec<AudioDevice>, String> {
+#[tauri::command]
+#[specta::specta]
+pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
     let host = cpal::default_host();
     let mut device_list: Vec<AudioDevice> = Vec::new();
     if let Ok(devices) = host.input_devices() {
@@ -34,14 +38,16 @@ pub fn get_desktop_devices() -> Result<Vec<AudioDevice>, String> {
     Ok(device_list)
 }
 
-pub fn set_desktop_device(
+#[tauri::command]
+#[specta::specta]
+pub fn set_audio_device(
     device_name: String,
     command_tx: State<mpsc::Sender<AudioCommand>>,
 ) -> Result<(), String> {
     command_tx.send(AudioCommand::ChangeDevice(device_name)).map_err(|e| e.to_string())
 }
 
-pub fn run_desktop_capture(
+pub fn start_audio_capture(
     command_rx: mpsc::Receiver<AudioCommand>,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
 ) {
@@ -69,8 +75,6 @@ pub fn run_desktop_capture(
         }
     }
 }
-
-// --- Private helper functions ---
 
 fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Device {
     if is_loopback {
