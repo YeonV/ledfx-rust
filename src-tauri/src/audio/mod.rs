@@ -18,13 +18,10 @@ pub struct AudioAnalysisData {
 #[derive(Default)]
 pub struct SharedAudioData(pub Arc<Mutex<AudioAnalysisData>>);
 
-// --- Platform-specific modules ---
 #[cfg(target_os = "android")]
-mod android;
+pub(crate) mod android;
 #[cfg(not(target_os = "android"))]
-mod desktop;
-
-// --- THE FIX: Create a consistent public API with conditional logic INSIDE the functions ---
+pub(crate) mod desktop;
 
 // This is the single, stable AudioCommand enum for the whole application.
 pub enum AudioCommand {
@@ -39,7 +36,8 @@ pub fn start_audio_capture(
     #[cfg(not(target_os = "android"))]
     desktop::run_desktop_capture(command_rx, audio_data);
     #[cfg(target_os = "android")]
-    android::run_android_capture(command_rx, audio_data);
+    // --- THE FIX: Call the correct function name ---
+    android::start_audio_capture(command_rx, audio_data);
 }
 
 // This is the single, stable get_audio_devices command.
