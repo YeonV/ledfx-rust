@@ -196,16 +196,28 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
-      - name: Inject Android Permissions
+      - name: Inject Android Permissions and Native Code
         run: |
+          # 1. Inject permissions into the manifest
           MANIFEST_PATH="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
           PERMISSIONS='<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
-          sed -i "/<\/application>/a \    ${PERMISSIONS}" $MANIFEST_PATH
+          sed -i "/<\/manifest>/i \    ${PERMISSIONS}" $MANIFEST_PATH
           echo "--- Patched AndroidManifest.xml ---"
           cat $MANIFEST_PATH
+          
+          # 2. Copy our custom Kotlin files
+          KOTLIN_DEST_PATH="src-tauri/gen/android/app/src/main/java/com/blade/ledfx_rust"
+          cp android-native/AudioVisualizer.kt $KOTLIN_DEST_PATH/
+          cp android-native/PermissionsPlugin.kt $KOTLIN_DEST_PATH/
+          echo "--- Copied native Kotlin files ---"
+
+          # 3. Inject the plugin loader into MainActivity.kt
+          MAIN_ACTIVITY_PATH="$KOTLIN_DEST_PATH/MainActivity.kt"
+          PLUGIN_LOADER='    override fun loadPlugin(id: String): app.tauri.plugin.Plugin {\n        return if (id == "permissions") {\n            PermissionsPlugin(this)\n        } else {\n            super.loadPlugin(id)\n        }\n    }'
+          sed -i "/class MainActivity : TauriActivity() {/a \    ${PLUGIN_LOADER}" $MAIN_ACTIVITY_PATH
+          echo "--- Patched MainActivity.kt ---"
+          cat $MAIN_ACTIVITY_PATH
           echo "---------------------------------"
-      - name: Copy Native Source
-        run: cp android-native/AudioVisualizer.kt src-tauri/gen/android/app/src/main/java/com/blade/ledfx_rust/
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build Unsigned Android Project

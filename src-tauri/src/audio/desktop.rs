@@ -8,8 +8,6 @@ use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
 use super::{AudioAnalysisData, AudioDevice, AudioCommand};
 
-// --- Public functions that are called by mod.rs ---
-
 pub fn get_desktop_devices() -> Result<Vec<AudioDevice>, String> {
     let host = cpal::default_host();
     let mut device_list: Vec<AudioDevice> = Vec::new();
@@ -69,8 +67,6 @@ pub fn run_desktop_capture(
         }
     }
 }
-
-// --- Private helper functions ---
 
 fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Device {
     if is_loopback {

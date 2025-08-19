@@ -18,13 +18,10 @@ pub struct AudioAnalysisData {
 #[derive(Default)]
 pub struct SharedAudioData(pub Arc<Mutex<AudioAnalysisData>>);
 
-// --- Platform-specific modules ---
 #[cfg(target_os = "android")]
 mod android;
 #[cfg(not(target_os = "android"))]
 mod desktop;
-
-// --- THE FIX: Create a consistent public API with conditional logic INSIDE the functions ---
 
 // This is the single, stable AudioCommand enum for the whole application.
 pub enum AudioCommand {

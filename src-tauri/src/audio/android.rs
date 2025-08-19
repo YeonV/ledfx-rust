@@ -11,8 +11,6 @@ use cpal::traits::{DeviceTrait, HostTrait};
 
 static SHARED_AUDIO_DATA: Lazy<Arc<Mutex<AudioAnalysisData>>> = Lazy::new(Default::default);
 
-// --- Public functions that are called by mod.rs ---
-
 pub fn run_android_capture(
     _command_rx: mpsc::Receiver<AudioCommand>,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
@@ -20,6 +18,23 @@ pub fn run_android_capture(
     let mut global_data = SHARED_AUDIO_DATA.lock().unwrap();
     *global_data = audio_data.lock().unwrap().clone();
     println!("ANDROID AUDIO: Native capture thread started (simulated).");
+}
+
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onFftDataCapture(
+    env: JNIEnv,
+    _class: JClass,
+    fft: JByteArray,
+    _sampling_rate: jint,
+) {
+    let fft_bytes = env.convert_byte_array(fft).unwrap();
+    let magnitudes: Vec<f32> = fft_bytes.iter().map(|&b| b as f32 / 128.0).collect();
+    const GAIN: f32 = 30.0;
+    let sum: f32 = magnitudes.iter().sum();
+    let volume = (sum / magnitudes.len() as f32 * GAIN).min(1.0);
+    let mut analysis_data = SHARED_AUDIO_DATA.lock().unwrap();
+    analysis_data.volume = volume;
 }
 
 pub fn get_android_devices() -> Result<Vec<AudioDevice>, String> {
@@ -43,23 +58,4 @@ pub fn set_android_device(
 ) -> Result<(), String> {
     println!("set_audio_device on Android will select between Native and CPAL in the future.");
     Ok(())
-}
-
-// --- JNI Function ---
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onFftDataCapture(
-    env: JNIEnv,
-    _class: JClass,
-    fft: JByteArray,
-    _sampling_rate: jint,
-) {
-    let fft_bytes = env.convert_byte_array(fft).unwrap();
-    let magnitudes: Vec<f32> = fft_bytes.iter().map(|&b| b as f32 / 128.0).collect();
-    const GAIN: f32 = 30.0;
-    let sum: f32 = magnitudes.iter().sum();
-    let volume = (sum / magnitudes.len() as f32 * GAIN).min(1.0);
-    let mut analysis_data = SHARED_AUDIO_DATA.lock().unwrap();
-    analysis_data.volume = volume;
 }
