@@ -195,6 +195,8 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Copy Native Source
+        run: cp android-native/AudioVisualizer.kt src-tauri/gen/android/app/src/main/java/com/blade/ledfx_rust/
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build Unsigned Android Project

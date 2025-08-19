@@ -1976,6 +1976,7 @@ name = "ledfx-rust"
 version = "0.0.1"
 dependencies = [
  "cpal",
+ "jni",
  "lazy_static",
  "mdns-sd",
  "reqwest",
