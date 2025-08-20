@@ -132,7 +132,7 @@ export function WledDiscoverer() {
         <Typography gutterBottom>Target FPS: {targetFps}</Typography>
         <Slider
           value={targetFps}
-          onChange={(_e, newValue) => setTargetFps(newValue as number)}
+          onChange={(e, newValue) => setTargetFps(newValue as number)}
           aria-labelledby="target-fps-slider"
           valueLabelDisplay="auto"
           step={5}
