@@ -21,6 +21,7 @@ pub fn run() {
     let audio_data_clone_for_thread = audio_data.0.clone();
 
     let builder = {
+        // --- THE FIX: A single, unconditional list of commands ---
         let builder = Builder::<tauri::Wry>::new()
             .commands(collect_commands![
                 wled::discover_wled,
@@ -29,8 +30,8 @@ pub fn run() {
                 engine::subscribe_to_frames,
                 engine::unsubscribe_from_frames,
                 engine::set_target_fps,
-                audio::get_audio_devices,
-                audio::set_audio_device
+                audio::get_audio_devices, // This now works on all platforms
+                audio::set_audio_device   // This now works on all platforms
             ])
             .typ::<wled::WledDevice>()
             .typ::<wled::LedsInfo>()

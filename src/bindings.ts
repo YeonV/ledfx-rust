@@ -13,9 +13,9 @@ async discoverWled(durationSecs: number | null) : Promise<Result<null, string>> 
     else return { status: "error", error: e  as any };
 }
 },
-async startEffect(ipAddress: string, ledCount: number, effectId: string) : Promise<Result<null, string>> {
+async startEffect(ipAddress: string, ledCount: number, effectId: string, config: EffectConfig) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("start_effect", { ipAddress, ledCount, effectId }) };
+    return { status: "ok", data: await TAURI_INVOKE("start_effect", { ipAddress, ledCount, effectId, config }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -82,6 +82,11 @@ async setAudioDevice(deviceName: string) : Promise<Result<null, string>> {
 /** user-defined types **/
 
 export type AudioDevice = { name: string }
+export type AudioReactiveConfig = { frequency_range: string }
+export type BaseEffectConfig = { brightness: number; blur: number; mirror: boolean; flip: boolean }
+export type BladePowerConfig = { base: BaseEffectConfig; audio: AudioReactiveConfig; decay: number; sensitivity: number }
+export type BladePowerLegacyConfig = { mirror: boolean; blur: number; decay: number; multiplier: number; background_color: string; frequency_range: string }
+export type EffectConfig = { mode: "legacy"; config: BladePowerLegacyConfig } | { mode: "blade"; config: BladePowerConfig }
 export type LedsInfo = { count: number }
 export type MapInfo = { id: number }
 export type WledDevice = { ip_address: string; port: number; name: string; version: string; leds: LedsInfo; udp_port: number; architecture: string; maps: MapInfo[] }

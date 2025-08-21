@@ -1,18 +1,20 @@
+// src/components/WledDiscoverer.tsx
+
 import { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { DeviceCard } from './DeviceCard';
 import { commands } from '../bindings';
-import type { WledDevice, AudioDevice } from '../bindings';
+import type { WledDevice, AudioDevice, BladePowerLegacyConfig, BladePowerConfig } from '../bindings';
 import { invoke } from '@tauri-apps/api/core';
 
 import {
   Box, Grid, LinearProgress, Stack, TextField, Alert, Slider, Typography,
   Card, CardHeader, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent,
-  CardContent
+  CardContent, Switch, FormControlLabel // <-- Import Switch
 } from '@mui/material';
-import { LoadingButton } from '@mui/lab';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
+import { LoadingButton } from '@mui/lab';
 
 export function WledDiscoverer() {
   const [devices, setDevices] = useState<WledDevice[]>([]);
@@ -24,18 +26,19 @@ export function WledDiscoverer() {
   const [targetFps, setTargetFps] = useState(60);
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
+  const [engineMode, setEngineMode] = useState<'legacy' | 'blade'>('legacy');
 
   useEffect(() => {
     const setupAudio = async () => {
-      if (window.__TAURI_METADATA__.__TAURI_PLATFORM__ === 'android') {
-        try {
-          await invoke('plugin:permissions|request_record_audio_permission');
-          console.log("Audio permission granted or already available.");
-        } catch (e) {
-          setError(`Permission error: ${e}`);
-          return;
-        }
-      }
+      // if (window.__TAURI_METADATA__.__TAURI_PLATFORM__ === 'android') {
+      //   try {
+      //     await invoke('plugin:permissions|request_record_audio_permission');
+      //     console.log("Audio permission granted or already available.");
+      //   } catch (e) {
+      //     setError(`Permission error: ${e}`);
+      //     return;
+      //   }
+      // }
 
       const result = await commands.getAudioDevices();
       if (result.status === 'ok') {
@@ -89,21 +92,41 @@ export function WledDiscoverer() {
     setSelectedEffects(prev => ({ ...prev, [device.ip_address]: newEffectId }));
     const isCurrentlyActive = activeEffects[device.ip_address] || false;
     if (isCurrentlyActive) {
-      commands.startEffect(device.ip_address, device.leds.count, newEffectId)
-        .catch(err => {
-          console.error("Failed to switch effect:", err);
-          setActiveEffects(prev => ({ ...prev, [device.ip_address]: false }));
-        });
+      // If an effect is active, we call start_effect again to switch it
+      handleStartEffect(device, newEffectId);
     }
   }, [activeEffects]);
 
-  const handleStartEffect = useCallback(async (device: WledDevice) => {
-    const effectId = selectedEffects[device.ip_address] || 'rainbow';
+  // --- MODIFIED: handleStartEffect now implements the parallel engine logic ---
+  const handleStartEffect = useCallback(async (device: WledDevice, effectIdOverride?: string) => {
+    const effectId = effectIdOverride || selectedEffects[device.ip_address] || 'bladepower';
+
+    let config: { mode: 'legacy', config: BladePowerLegacyConfig } | { mode: 'blade', config: BladePowerConfig };
     try {
-      await commands.startEffect(device.ip_address, device.leds.count, effectId);
+      if (engineMode === 'legacy') {
+        const legacyConfig: BladePowerLegacyConfig = {
+          mirror: false,
+          blur: 2.0,
+          decay: 0.7,
+          multiplier: 0.5,
+          background_color: '#000000',
+          frequency_range: 'Lows (beat+bass)',
+        };
+        config = { mode: 'legacy', config: legacyConfig };
+      } else { // 'blade' mode
+        const bladeConfig: BladePowerConfig = {
+          base: { brightness: 1.0, blur: 2.0, mirror: false, flip: false },
+          audio: { frequency_range: 'Lows (beat+bass)' },
+          decay: 0.95,
+          sensitivity: 1.0,
+        };
+        config = { mode: 'blade', config: bladeConfig };
+      }
+
+      await commands.startEffect(device.ip_address, device.leds.count, effectId, config);
       setActiveEffects(prev => ({ ...prev, [device.ip_address]: true }));
     } catch (err) { console.error("Failed to start effect:", err); }
-  }, [selectedEffects]);
+  }, [selectedEffects, engineMode]);
 
   const handleStopEffect = useCallback(async (ip: string) => {
     try {
@@ -126,6 +149,16 @@ export function WledDiscoverer() {
         >
           {isScanning ? 'Scanning...' : 'Discover'}
         </LoadingButton>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={engineMode === 'blade'}
+              onChange={(e) => setEngineMode(e.target.checked ? 'blade' : 'legacy')}
+              color="secondary"
+            />
+          }
+          label={`Engine: ${engineMode.toUpperCase()}`}
+        />
       </Stack>
 
       <Box sx={{ width: 300, mb: 2 }}>
@@ -175,7 +208,7 @@ export function WledDiscoverer() {
             <DeviceCard
               device={device}
               isActive={activeEffects[device.ip_address] || false}
-              selectedEffect={selectedEffects[device.ip_address] || 'rainbow'}
+              selectedEffect={selectedEffects[device.ip_address] || 'bladepower'}
               onEffectSelect={handleEffectSelection}
               onStart={handleStartEffect}
               onStop={handleStopEffect}
