@@ -9,7 +9,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{State, AppHandle, Emitter};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 
 // The ActiveEffect no longer needs led_count, as the effect instance
@@ -18,13 +18,21 @@ struct ActiveEffect {
     effect: Box<dyn Effect>,
 }
 
+#[tauri::command]
+#[specta::specta]
+pub fn get_legacy_effect_schema(effect_id: String) -> Result<Vec<legacy::blade_power::EffectSetting>, String> {
+    match effect_id.as_str() {
+        "bladepower" => Ok(legacy::blade_power::get_schema()),
+        _ => Err(format!("Schema not found for legacy effect: {}", effect_id)),
+    }
+}
+
 // This is the type-safe enum that the frontend will send.
 // It uses the full path to the config structs to be explicit.
-#[derive(Deserialize, Type, Clone)]
+#[derive(Deserialize, Serialize, Type, Clone)]
 #[serde(tag = "mode", content = "config")]
 pub enum EffectConfig {
     #[serde(rename = "legacy")]
-    // rust-analyzer-disable-next-line
     Legacy(crate::effects::legacy::blade_power::BladePowerLegacyConfig),
     #[serde(rename = "blade")]
     Blade(crate::effects::blade::blade_power::BladePowerConfig),
@@ -42,6 +50,7 @@ pub enum EngineCommand {
     Subscribe { ip_address: String },
     Unsubscribe { ip_address: String },
     SetTargetFps { fps: u32 },
+    UpdateSettings { ip_address: String, settings: EffectConfig },
 }
 
 pub fn run_effect_engine(
@@ -104,7 +113,18 @@ pub fn run_effect_engine(
                     if fps > 0 {
                         target_frame_duration = Duration::from_millis(1000 / fps as u64);
                     }
+                },
+                EngineCommand::UpdateSettings { ip_address, settings } => {
+                    if let Some(active_effect) = active_effects.get_mut(&ip_address) {
+                        // --- THE FIX: Unwrap the enum and get the inner config value ---
+                        let config_value = match settings {
+                            EffectConfig::Legacy(config) => serde_json::to_value(config).unwrap(),
+                            EffectConfig::Blade(config) => serde_json::to_value(config).unwrap(),
+                        };
+                        active_effect.effect.update_settings(config_value);
+                    }
                 }
+
             }
         }
 
@@ -112,11 +132,36 @@ pub fn run_effect_engine(
         frame_count = frame_count.wrapping_add(1);
 
         for (ip, active_effect) in &mut active_effects {
-            let data = active_effect.effect.render_frame(&latest_audio_data);
+            let mut data = active_effect.effect.render_frame(&latest_audio_data);
+
+            // --- THE FIX: The Post-Processing Pipeline ---
+            if let Some(effect_instance) = active_effect.effect.as_any().downcast_ref::<legacy::blade_power::BladePowerLegacy>() {
+                let config = &effect_instance.config;
+                
+                if config.mirror {
+                    // This is a simplified mirror for 1D strips.
+                    let pixel_count = data.len() / 3;
+                    let half_len = pixel_count / 2;
+                    for i in 0..half_len {
+                        let r = data[i * 3];
+                        let g = data[i * 3 + 1];
+                        let b = data[i * 3 + 2];
+                        let target_index = (pixel_count - 1 - i) * 3;
+                        data[target_index] = r;
+                        data[target_index + 1] = g;
+                        data[target_index + 2] = b;
+                    }
+                }
+
+                // A real blur implementation is complex and will be added later.
+                // if config.blur > 0.0 { ... }
+            }
+
             let destination = format!("{}:4048", ip);
             let _ = send_ddp_packet(&socket, &destination, 0, &data, frame_count);
             latest_frames.insert(ip.clone(), data);
         }
+
 
         let payload: HashMap<String, Vec<u8>> = latest_frames.iter()
             .filter(|(ip, _)| subscribed_ips.contains(*ip))
@@ -172,5 +217,16 @@ pub fn unsubscribe_from_frames(ip_address: String, command_tx: State<mpsc::Sende
 #[specta::specta]
 pub fn set_target_fps(fps: u32, command_tx: State<mpsc::Sender<EngineCommand>>) -> Result<(), String> {
     command_tx.send(EngineCommand::SetTargetFps { fps }).unwrap();
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_effect_settings(
+    ip_address: String,
+    settings: EffectConfig, // <-- MODIFIED
+    command_tx: State<mpsc::Sender<EngineCommand>>
+) -> Result<(), String> {
+    command_tx.send(EngineCommand::UpdateSettings { ip_address, settings }).unwrap();
     Ok(())
 }

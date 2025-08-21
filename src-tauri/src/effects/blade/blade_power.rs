@@ -3,11 +3,11 @@
 use crate::audio::AudioAnalysisData;
 use crate::effects::Effect;
 use crate::utils::hsv_to_rgb;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 
 // --- Composable Config Structs ---
-#[derive(Deserialize, Type, Clone)]
+#[derive(Deserialize, Serialize, Type, Clone)]
 pub struct BaseEffectConfig {
     pub brightness: f32,
     pub blur: f32,
@@ -15,13 +15,13 @@ pub struct BaseEffectConfig {
     pub flip: bool,
 }
 
-#[derive(Deserialize, Type, Clone)]
+#[derive(Deserialize, Serialize, Type, Clone)]
 pub struct AudioReactiveConfig {
     pub frequency_range: String,
 }
 
 // The final, clean config for this effect.
-#[derive(Deserialize, Type, Clone)]
+#[derive(Deserialize, Serialize, Type, Clone)]
 pub struct BladePowerConfig {
     // Composed blocks
     pub base: BaseEffectConfig,
@@ -75,5 +75,12 @@ impl Effect for BladePower {
         }
 
         rgb_pixels
+    }
+    fn update_settings(&mut self, settings: serde_json::Value) {
+        if let Ok(new_config) = serde_json::from_value(settings) {
+            self.config = new_config;
+        } else {
+            eprintln!("Failed to deserialize settings for BladePower");
+        }
     }
 }

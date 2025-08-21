@@ -4,17 +4,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { DeviceCard } from './DeviceCard';
 import { commands } from '../bindings';
-import type { WledDevice, AudioDevice, BladePowerLegacyConfig, BladePowerConfig } from '../bindings';
-import { invoke } from '@tauri-apps/api/core';
+import type { WledDevice, AudioDevice, BladePowerLegacyConfig, BladePowerConfig, EffectConfig } from '../bindings';
+import type { EffectSetting } from '../bindings';
 
 import {
-  Box, Grid, LinearProgress, Stack, TextField, Alert, Slider, Typography,
+  Box, Grid, LinearProgress, Button, Stack, TextField, Alert, Slider, Typography,
   Card, CardHeader, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent,
   CardContent, Switch, FormControlLabel // <-- Import Switch
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { LoadingButton } from '@mui/lab';
 
 export function WledDiscoverer() {
   const [devices, setDevices] = useState<WledDevice[]>([]);
@@ -27,6 +26,8 @@ export function WledDiscoverer() {
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
   const [engineMode, setEngineMode] = useState<'legacy' | 'blade'>('legacy');
+  const [effectSchemas, setEffectSchemas] = useState<Record<string, EffectSetting[]>>({});
+  const [effectSettings, setEffectSettings] = useState<Record<string, Record<string, any>>>({});
 
   useEffect(() => {
     const setupAudio = async () => {
@@ -88,45 +89,83 @@ export function WledDiscoverer() {
     }
   };
 
-  const handleEffectSelection = useCallback((device: WledDevice, newEffectId: string) => {
+const handleEffectSelection = useCallback(async (device: WledDevice, newEffectId: string) => {
     setSelectedEffects(prev => ({ ...prev, [device.ip_address]: newEffectId }));
-    const isCurrentlyActive = activeEffects[device.ip_address] || false;
-    if (isCurrentlyActive) {
-      // If an effect is active, we call start_effect again to switch it
+
+    if (!effectSchemas[newEffectId]) {
+      try {
+        // For now, we assume only legacy schemas are available
+        const result = await commands.getLegacyEffectSchema(newEffectId);
+        if (result.status === 'ok') {
+          const schema = result.data;
+          setEffectSchemas(prev => ({ ...prev, [newEffectId]: schema }));
+          const defaultSettings = Object.fromEntries(schema.map(s => [s.id, s.defaultValue]));
+          setEffectSettings(prev => ({ ...prev, [device.ip_address]: defaultSettings }));
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    if (activeEffects[device.ip_address]) {
       handleStartEffect(device, newEffectId);
     }
-  }, [activeEffects]);
+  }, [activeEffects, effectSchemas]);
 
-  // --- MODIFIED: handleStartEffect now implements the parallel engine logic ---
+  const handleSettingsChange = useCallback((ip: string, id: string, value: any) => {
+    const newSettings = {
+      ...effectSettings[ip],
+      [id]: value,
+    };
+    setEffectSettings(prev => ({
+      ...prev,
+      [ip]: newSettings,
+    }));
+
+    if (activeEffects[ip]) {
+      // --- THE FIX: Build the payload in a type-safe way ---
+      let configPayload: EffectConfig;
+      if (engineMode === 'legacy') {
+        configPayload = {
+          mode: engineMode,
+          config: newSettings as BladePowerLegacyConfig,
+        };
+      } else {
+        configPayload = {
+          mode: 'blade',
+          config: newSettings as BladePowerConfig,
+        };
+      }
+      commands.updateEffectSettings(ip, configPayload).catch(console.error);
+    }
+  }, [activeEffects, effectSettings, engineMode]);
+
+
   const handleStartEffect = useCallback(async (device: WledDevice, effectIdOverride?: string) => {
     const effectId = effectIdOverride || selectedEffects[device.ip_address] || 'bladepower';
+    const settings = effectSettings[device.ip_address];
 
-    let config: { mode: 'legacy', config: BladePowerLegacyConfig } | { mode: 'blade', config: BladePowerConfig };
+    if (!settings) {
+      // Attempt to load the schema and default settings if they don't exist
+      try {
+        const result = await commands.getLegacyEffectSchema(effectId);
+        if (result.status === 'ok') {
+          const schema = result.data;
+          const defaultSettings = Object.fromEntries(schema.map(s => [s.id, s.defaultValue]));
+          setEffectSettings(prev => ({ ...prev, [device.ip_address]: defaultSettings }));
+          // Now call start with the newly loaded default settings
+          const config = { mode: 'legacy', config: defaultSettings } as EffectConfig;
+          await commands.startEffect(device.ip_address, device.leds.count, effectId, config);
+          setActiveEffects(prev => ({ ...prev, [device.ip_address]: true }));
+        }
+      } catch (e) { console.error("Failed to load schema for effect:", e); }
+      return;
+    }
+
     try {
-      if (engineMode === 'legacy') {
-        const legacyConfig: BladePowerLegacyConfig = {
-          mirror: false,
-          blur: 2.0,
-          decay: 0.7,
-          multiplier: 0.5,
-          background_color: '#000000',
-          frequency_range: 'Lows (beat+bass)',
-        };
-        config = { mode: 'legacy', config: legacyConfig };
-      } else { // 'blade' mode
-        const bladeConfig: BladePowerConfig = {
-          base: { brightness: 1.0, blur: 2.0, mirror: false, flip: false },
-          audio: { frequency_range: 'Lows (beat+bass)' },
-          decay: 0.95,
-          sensitivity: 1.0,
-        };
-        config = { mode: 'blade', config: bladeConfig };
-      }
-
+      const config = { mode: 'legacy', config: settings } as EffectConfig;
       await commands.startEffect(device.ip_address, device.leds.count, effectId, config);
       setActiveEffects(prev => ({ ...prev, [device.ip_address]: true }));
     } catch (err) { console.error("Failed to start effect:", err); }
-  }, [selectedEffects, engineMode]);
+  }, [selectedEffects, effectSettings, engineMode]);
 
   const handleStopEffect = useCallback(async (ip: string) => {
     try {
@@ -134,6 +173,7 @@ export function WledDiscoverer() {
       setActiveEffects(prev => ({ ...prev, [ip]: false }));
     } catch (err) { console.error("Failed to stop effect:", err); }
   }, []);
+
 
   return (
     <Box sx={{ width: '100%', p: 2 }}>
@@ -143,12 +183,12 @@ export function WledDiscoverer() {
           onChange={(e) => setDuration(Number(e.target.value))}
           disabled={isScanning} size="small"
         />
-        <LoadingButton
+        <Button
           onClick={handleDiscover} loading={isScanning} loadingPosition="start"
           startIcon={<SearchIcon />} variant="contained"
         >
           {isScanning ? 'Scanning...' : 'Discover'}
-        </LoadingButton>
+        </Button>
         <FormControlLabel
           control={
             <Switch
@@ -209,6 +249,10 @@ export function WledDiscoverer() {
               device={device}
               isActive={activeEffects[device.ip_address] || false}
               selectedEffect={selectedEffects[device.ip_address] || 'bladepower'}
+              // --- NEW: Pass schema and settings props ---
+              schema={effectSchemas[selectedEffects[device.ip_address] || 'bladepower']}
+              settings={effectSettings[device.ip_address]}
+              onSettingChange={(id: string, value: any) => handleSettingsChange(device.ip_address, id, value)}
               onEffectSelect={handleEffectSelection}
               onStart={handleStartEffect}
               onStop={handleStopEffect}

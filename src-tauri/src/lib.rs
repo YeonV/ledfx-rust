@@ -12,6 +12,7 @@ use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 #[cfg(debug_assertions)]
 use specta_typescript::Typescript;
+use crate::effects::legacy;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,13 +31,17 @@ pub fn run() {
                 engine::subscribe_to_frames,
                 engine::unsubscribe_from_frames,
                 engine::set_target_fps,
-                audio::get_audio_devices, // This now works on all platforms
-                audio::set_audio_device   // This now works on all platforms
+                audio::get_audio_devices,
+                audio::set_audio_device,                
+                engine::get_legacy_effect_schema,
+                engine::update_effect_settings
             ])
             .typ::<wled::WledDevice>()
             .typ::<wled::LedsInfo>()
             .typ::<wled::MapInfo>()
-            .typ::<audio::AudioDevice>();
+            .typ::<audio::AudioDevice>()
+            .typ::<legacy::blade_power::EffectSetting>()
+            .typ::<legacy::blade_power::Control>();
 
         #[cfg(debug_assertions)]
         builder

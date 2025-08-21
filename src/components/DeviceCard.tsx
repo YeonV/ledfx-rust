@@ -2,15 +2,20 @@
 
 import React from 'react';
 import { EffectPreview } from './EffectPreview';
-import { WledDevice } from '../bindings';
+import { EffectSetting, WledDevice } from '../bindings';
 
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Button, Card, CardActions, CardContent, CardHeader, FormControl,
   InputLabel, MenuItem, Select, Typography
 } from '@mui/material';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
+import { ExpandMore } from '@mui/icons-material';
+import { EffectSettings } from './Effect.Settings';
 
 interface DeviceCardProps {
   device: WledDevice;
@@ -19,15 +24,21 @@ interface DeviceCardProps {
   onEffectSelect: (device: WledDevice, effectId: string) => void;
   onStart: (device: WledDevice) => void;
   onStop: (ip: string) => void;
+  onSettingChange: (id: string, value: any) => void;
+  schema?: EffectSetting[];
+  settings?: Record<string, any>;
 }
 
 export const DeviceCard = React.memo(({
   device,
   isActive,
   selectedEffect,
+  schema,
+  settings,
   onEffectSelect,
   onStart,
   onStop,
+  onSettingChange,
 }: DeviceCardProps) => {
   return (
     <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -47,6 +58,16 @@ export const DeviceCard = React.memo(({
         <Typography variant="body2" color="text.secondary">
           Architecture: {device.architecture}
         </Typography>
+        {schema && settings && <Accordion>
+          <AccordionSummary expandIcon={<ExpandMore />}>
+            <Typography>Effect Settings</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            
+              <EffectSettings schema={schema} settings={settings} onSettingChange={onSettingChange} />
+            
+          </AccordionDetails>
+        </Accordion>}
       </CardContent>
       <CardActions sx={{ justifyContent: 'space-between' }}>
         <FormControl size="small" sx={{ minWidth: 120 }}>
