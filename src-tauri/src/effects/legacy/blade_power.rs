@@ -1,5 +1,4 @@
 // src-tauri/src/effects/legacy/blade_power.rs
-// src-tauri/src/effects/legacy/blade_power.rs
 
 use crate::audio::AudioAnalysisData;
 use crate::effects::Effect;
@@ -45,6 +44,7 @@ pub struct BladePowerLegacyConfig {
     pub background_color: String,
     pub frequency_range: String,
     pub gradient: String,
+    pub flip: bool,
 }
 
 pub fn get_schema() -> Vec<EffectSetting> {
@@ -105,6 +105,13 @@ pub fn get_schema() -> Vec<EffectSetting> {
             control: Control::ColorPicker, // A gradient picker would go here
             default_value: DefaultValue::String("linear-gradient(90deg, #ff0000 0%, #0000ff 100%)".to_string()),
         },
+        EffectSetting {
+            id: "flip".to_string(),
+            name: "Flip".to_string(),
+            description: "Flip the effect direction".to_string(),
+            control: Control::Checkbox,
+            default_value: DefaultValue::Bool(false),
+        },
     ]
 }
 
@@ -112,46 +119,100 @@ pub struct BladePowerLegacy {
     pub config: BladePowerLegacyConfig,
     pixel_count: u32,
     gradient_palette: Vec<[u8; 3]>,
-    v_channel: Vec<f32>, // The brightness (Value) for each pixel
+    v_channel: Vec<f32>,
 }
 
 impl BladePowerLegacy {
     pub fn new(config: BladePowerLegacyConfig, pixel_count: u32) -> Self {
-        let gradient_palette = parse_gradient(&config.gradient, pixel_count as usize);
-        
-        Self {
+        let mut instance = Self {
             config,
             pixel_count,
-            gradient_palette,
-            v_channel: vec![0.0; pixel_count as usize], // Initialize all pixels to black
+            gradient_palette: Vec::new(),
+            v_channel: vec![0.0; pixel_count as usize],
+        };
+        instance.rebuild_palette();
+        instance
+    }
+
+    fn rebuild_palette(&mut self) {
+        // --- THE FIX: The correct order of operations ---
+
+        // 1. Parse the full gradient.
+        let mut base_palette = parse_gradient(&self.config.gradient, self.pixel_count as usize);
+
+        // 2. Flip the full gradient first if flip is on.
+        if self.config.flip {
+            base_palette.reverse();
+        }
+
+        if self.config.mirror {
+            let half_len = (self.pixel_count as f32 / 2.0).ceil() as usize;
+            
+            // 3. Squeeze the (potentially flipped) base palette into the first half.
+            let squeezed_palette = resample_palette(&base_palette, half_len);
+
+            let mut final_palette = vec![[0, 0, 0]; self.pixel_count as usize];
+            
+            // 4. Build the final mirrored palette from the squeezed version.
+            for i in 0..half_len {
+                let color = squeezed_palette[i];
+                final_palette[i] = color;
+                final_palette[self.pixel_count as usize - 1 - i] = color;
+            }
+            
+            self.gradient_palette = final_palette;
+        } else {
+            // If not mirroring, just use the (potentially flipped) base palette.
+            self.gradient_palette = base_palette;
         }
     }
 }
 
+// --- THE FIX: This function now correctly returns the new palette ---
+fn resample_palette(palette: &[[u8; 3]], new_len: usize) -> Vec<[u8; 3]> {
+    if palette.is_empty() || new_len == 0 {
+        return Vec::new();
+    }
+    let mut new_palette = Vec::with_capacity(new_len);
+    let old_len = palette.len();
+    for i in 0..new_len {
+        let old_index = (i as f32 * (old_len - 1) as f32 / (new_len - 1).max(1) as f32).round() as usize;
+        new_palette.push(palette[old_index]);
+    }
+    new_palette
+}
+
 impl Effect for BladePowerLegacy {
-    fn render_frame(&mut self, audio_data: &AudioAnalysisData) -> Vec<u8> {
-        // --- THE FIX: The correct, stateful rendering logic ---
-        let power = audio_data.volume;
-        let bar_level = (power * self.config.multiplier * 2.0).min(1.0);
-        let bar_idx = (bar_level * self.pixel_count as f32) as usize;
+    fn render_frame(&mut self, _pixel_count: u32, audio_data: &AudioAnalysisData) -> Vec<u8> {
+        let bar_level = (audio_data.volume * self.config.multiplier * 2.0).min(1.0);
+        
+        let bar_idx = if self.config.mirror {
+            (bar_level * (self.pixel_count as f32 / 2.0)) as usize
+        } else {
+            (bar_level * self.pixel_count as f32) as usize
+        };
 
-        // 1. Apply decay to all pixels
+        let decay_factor = self.config.decay / 2.0 + 0.45;
         for v in self.v_channel.iter_mut() {
-            *v *= self.config.decay / 2.0 + 0.45;
+            *v *= decay_factor;
         }
 
-        // 2. Apply new power to the active part of the bar
-        for i in 0..bar_idx {
-            self.v_channel[i] = 1.0; // Set to full brightness
+        if self.config.mirror {
+            for i in 0..bar_idx {
+                self.v_channel[i] = 1.0;
+                self.v_channel[self.pixel_count as usize - 1 - i] = 1.0;
+            }
+        } else {
+            for i in 0..bar_idx {
+                self.v_channel[i] = 1.0;
+            }
         }
 
-        // 3. Generate the final RGB pixels
         let mut rgb_pixels = Vec::with_capacity((self.pixel_count * 3) as usize);
         for i in 0..self.pixel_count as usize {
             let base_color = self.gradient_palette[i];
             let brightness = self.v_channel[i];
-
-            // Multiply the gradient color by the current brightness value
+            
             let r = (base_color[0] as f32 * brightness) as u8;
             let g = (base_color[1] as f32 * brightness) as u8;
             let b = (base_color[2] as f32 * brightness) as u8;
@@ -161,11 +222,11 @@ impl Effect for BladePowerLegacy {
         
         rgb_pixels
     }
-     fn update_settings(&mut self, settings: serde_json::Value) {
+
+    fn update_settings(&mut self, settings: serde_json::Value) {
         if let Ok(new_config) = serde_json::from_value(settings) {
             self.config = new_config;
-            // If the gradient changes, we must re-calculate the palette.
-            self.gradient_palette = parse_gradient(&self.config.gradient, self.pixel_count as usize);
+            self.rebuild_palette();
         } else {
             eprintln!("Failed to deserialize settings for BladePowerLegacy");
         }

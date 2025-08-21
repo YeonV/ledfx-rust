@@ -13,7 +13,7 @@ async discoverWled(durationSecs: number | null) : Promise<Result<null, string>> 
     else return { status: "error", error: e  as any };
 }
 },
-async startEffect(ipAddress: string, ledCount: number, effectId: string, config: EffectConfig) : Promise<Result<null, string>> {
+async startEffect(ipAddress: string, ledCount: number, effectId: string, config: EffectConfig | null) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("start_effect", { ipAddress, ledCount, effectId, config }) };
 } catch (e) {
@@ -77,7 +77,7 @@ async getLegacyEffectSchema(effectId: string) : Promise<Result<EffectSetting[], 
     else return { status: "error", error: e  as any };
 }
 },
-async updateEffectSettings(ipAddress: string, settings: EffectConfig) : Promise<Result<null, string>> {
+async updateEffectSettings(ipAddress: string, settings: EffectConfig | null) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("update_effect_settings", { ipAddress, settings }) };
 } catch (e) {
@@ -101,7 +101,7 @@ export type AudioDevice = { name: string }
 export type AudioReactiveConfig = { frequency_range: string }
 export type BaseEffectConfig = { brightness: number; blur: number; mirror: boolean; flip: boolean }
 export type BladePowerConfig = { base: BaseEffectConfig; audio: AudioReactiveConfig; decay: number; sensitivity: number }
-export type BladePowerLegacyConfig = { mirror: boolean; blur: number; decay: number; multiplier: number; background_color: string; frequency_range: string; gradient: string }
+export type BladePowerLegacyConfig = { mirror: boolean; blur: number; decay: number; multiplier: number; background_color: string; frequency_range: string; gradient: string; flip: boolean }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean
 export type EffectConfig = { mode: "legacy"; config: BladePowerLegacyConfig } | { mode: "blade"; config: BladePowerConfig }

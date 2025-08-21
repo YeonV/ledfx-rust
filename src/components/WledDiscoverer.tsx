@@ -141,28 +141,21 @@ const handleEffectSelection = useCallback(async (device: WledDevice, newEffectId
 
   const handleStartEffect = useCallback(async (device: WledDevice, effectIdOverride?: string) => {
     const effectId = effectIdOverride || selectedEffects[device.ip_address] || 'bladepower';
-    const settings = effectSettings[device.ip_address];
-
-    if (!settings) {
-      // Attempt to load the schema and default settings if they don't exist
-      try {
-        const result = await commands.getLegacyEffectSchema(effectId);
-        if (result.status === 'ok') {
-          const schema = result.data;
-          const defaultSettings = Object.fromEntries(schema.map(s => [s.id, s.defaultValue]));
-          setEffectSettings(prev => ({ ...prev, [device.ip_address]: defaultSettings }));
-          // Now call start with the newly loaded default settings
-          const config = { mode: 'legacy', config: defaultSettings } as EffectConfig;
-          await commands.startEffect(device.ip_address, device.leds.count, effectId, config);
-          setActiveEffects(prev => ({ ...prev, [device.ip_address]: true }));
-        }
-      } catch (e) { console.error("Failed to load schema for effect:", e); }
-      return;
-    }
-
+    
     try {
-      const config = { mode: 'legacy', config: settings } as EffectConfig;
-      await commands.startEffect(device.ip_address, device.leds.count, effectId, config);
+      // --- THE FIX: Handle both cases ---
+      if (effectId === 'bladepower') {
+        const settings = effectSettings[device.ip_address];
+        if (!settings) {
+          console.error("Settings not loaded for BladePower, cannot start.");
+          return;
+        }
+        const configPayload = { mode: engineMode, config: settings } as EffectConfig;
+        await commands.startEffect(device.ip_address, device.leds.count, effectId, configPayload);
+      } else {
+        // For simple effects, send a null config.
+        await commands.startEffect(device.ip_address, device.leds.count, effectId, null);
+      }
       setActiveEffects(prev => ({ ...prev, [device.ip_address]: true }));
     } catch (err) { console.error("Failed to start effect:", err); }
   }, [selectedEffects, effectSettings, engineMode]);

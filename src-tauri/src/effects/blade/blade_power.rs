@@ -23,10 +23,8 @@ pub struct AudioReactiveConfig {
 // The final, clean config for this effect.
 #[derive(Deserialize, Serialize, Type, Clone)]
 pub struct BladePowerConfig {
-    // Composed blocks
     pub base: BaseEffectConfig,
     pub audio: AudioReactiveConfig,
-    // Specific settings
     pub decay: f32,
     pub sensitivity: f32,
 }
@@ -55,8 +53,14 @@ impl BladePower {
 }
 
 impl Effect for BladePower {
-    fn render_frame(&mut self, audio_data: &AudioAnalysisData) -> Vec<u8> {
-        // Logic is identical, but uses the clean config structure.
+    // --- THE FIX: The signature now matches the trait ---
+    fn render_frame(&mut self, pixel_count: u32, audio_data: &AudioAnalysisData) -> Vec<u8> {
+        // Safety check
+        if pixel_count != self.pixel_count {
+            return vec![0; (pixel_count * 3) as usize];
+        }
+
+        // The rest of your logic is correct.
         self.bar_level = (audio_data.volume * self.config.sensitivity).min(1.0);
 
         let bar_idx = (self.bar_level * self.pixel_count as f32) as usize;
@@ -76,6 +80,7 @@ impl Effect for BladePower {
 
         rgb_pixels
     }
+    
     fn update_settings(&mut self, settings: serde_json::Value) {
         if let Ok(new_config) = serde_json::from_value(settings) {
             self.config = new_config;
