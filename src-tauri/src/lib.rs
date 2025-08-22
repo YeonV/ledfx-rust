@@ -1,18 +1,18 @@
 // src-tauri/src/lib.rs
 
-pub mod wled;
+pub mod audio;
 pub mod effects;
 pub mod engine;
-pub mod audio;
 pub mod utils;
+pub mod wled;
 
+use crate::effects::legacy;
+#[cfg(debug_assertions)]
+use specta_typescript::Typescript;
 use std::sync::mpsc;
 use std::thread;
 use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
-#[cfg(debug_assertions)]
-use specta_typescript::Typescript;
-use crate::effects::legacy;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -32,7 +32,7 @@ pub fn run() {
                 engine::unsubscribe_from_frames,
                 engine::set_target_fps,
                 audio::get_audio_devices,
-                audio::set_audio_device,                
+                audio::set_audio_device,
                 engine::get_legacy_effect_schema,
                 engine::update_effect_settings
             ])
@@ -52,6 +52,7 @@ pub fn run() {
     };
 
     let mut tauri_builder = tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .manage(engine_command_tx)
         .manage(audio_command_tx)

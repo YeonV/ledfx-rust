@@ -80,7 +80,7 @@ impl Effect for BladePower {
 
         rgb_pixels
     }
-    
+
     fn update_settings(&mut self, settings: serde_json::Value) {
         if let Ok(new_config) = serde_json::from_value(settings) {
             self.config = new_config;

@@ -1,8 +1,8 @@
 // src-tauri/src/audio/mod.rs
 
-use std::sync::{mpsc, Arc, Mutex};
 use serde::Serialize;
 use specta::Type;
+use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
 
 #[derive(Serialize, Clone, Type)]

@@ -5,24 +5,47 @@ import { Card, CardHeader, CardContent, FormControl, InputLabel, Select, MenuIte
 import SettingsIcon from '@mui/icons-material/Settings';
 import { commands } from '../../bindings';
 import type { AudioDevice } from '../../bindings';
+import { invoke } from '@tauri-apps/api/core';
+import { platform } from '@tauri-apps/plugin-os';
 
 export function AudioSettings() {
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
+  const currentPlatform = platform();
 
   useEffect(() => {
-    commands.getAudioDevices().then(result => {
-      if (result.status === 'ok') {
-        setAudioDevices(result.data);
-        if (result.data.length > 0) {
-          const defaultDevice = result.data[0].name;
-          setSelectedAudioDevice(defaultDevice);
-          commands.setAudioDevice(defaultDevice).catch(console.error);
+    if (currentPlatform === 'android') { 
+      invoke('plugin:permissions|requestRecordAudioPermission')
+        .then(() => console.log('Audio permission granted'))
+        .catch(err => console.error('Audio permission error:', err))
+        .finally(() => {
+          commands.getAudioDevices().then(result => {
+            if (result.status === 'ok') {
+              setAudioDevices(result.data);
+              if (result.data.length > 0) {
+                const defaultDevice = result.data[0].name;
+                setSelectedAudioDevice(defaultDevice);
+                commands.setAudioDevice(defaultDevice).catch(console.error);
+              }
+            } else {
+              console.error(result.error);
+            }
+          });
+        });
+    } else {
+      commands.getAudioDevices().then(result => {
+        if (result.status === 'ok') {
+          setAudioDevices(result.data);
+          if (result.data.length > 0) {
+            const defaultDevice = result.data[0].name;
+            setSelectedAudioDevice(defaultDevice);
+            commands.setAudioDevice(defaultDevice).catch(console.error);
+          }
+        } else {
+          console.error(result.error);
         }
-      } else {
-        console.error(result.error);
-      }
-    });
+      });
+    }
   }, []);
 
   const handleAudioDeviceChange = (event: SelectChangeEvent<string>) => {

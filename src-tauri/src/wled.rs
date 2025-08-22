@@ -2,9 +2,9 @@
 
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use specta::Type;
 
 #[derive(Deserialize, Clone, Serialize, Type)]
 pub struct LedsInfo {
@@ -40,7 +40,10 @@ pub struct WledDevice {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn discover_wled(app_handle: AppHandle, duration_secs: Option<u32>) -> Result<(), String> {
+pub async fn discover_wled(
+    app_handle: AppHandle,
+    duration_secs: Option<u32>,
+) -> Result<(), String> {
     const WLED_SERVICE_TYPE: &str = "_wled._tcp.local.";
     let search_duration = Duration::from_secs(duration_secs.unwrap_or(10) as u64);
     let mdns = ServiceDaemon::new().map_err(|e| e.to_string())?;
@@ -69,12 +72,15 @@ pub async fn discover_wled(app_handle: AppHandle, duration_secs: Option<u32>) ->
                                 architecture: api_data.arch,
                                 maps: api_data.maps,
                             };
-                            app_handle.emit("wled-device-found", &enriched_device).unwrap();
+                            app_handle
+                                .emit("wled-device-found", &enriched_device)
+                                .unwrap();
                         }
                     }
                 }
             }
-        }).await;
+        })
+        .await;
     });
 
     Ok(())

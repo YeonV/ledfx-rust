@@ -1,13 +1,13 @@
 // src-tauri/src/audio/android.rs
 
-use jni::objects::{JClass, JByteArray};
+use super::{AudioAnalysisData, AudioCommand, AudioDevice};
+use cpal::traits::{DeviceTrait, HostTrait};
+use jni::objects::{JByteArray, JClass};
+use jni::sys::jint;
 use jni::JNIEnv;
-use jni::sys::{jint};
 use once_cell::sync::Lazy;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
-use super::{AudioAnalysisData, AudioDevice, AudioCommand};
-use cpal::traits::{DeviceTrait, HostTrait};
 
 static SHARED_AUDIO_DATA: Lazy<Arc<Mutex<AudioAnalysisData>>> = Lazy::new(Default::default);
 
@@ -39,7 +39,9 @@ pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onFftDataCapture
 
 pub fn get_android_devices() -> Result<Vec<AudioDevice>, String> {
     let mut device_list: Vec<AudioDevice> = Vec::new();
-    device_list.push(AudioDevice { name: "System Audio (Native Visualizer)".to_string() });
+    device_list.push(AudioDevice {
+        name: "System Audio (Native Visualizer)".to_string(),
+    });
 
     let host = cpal::default_host();
     if let Ok(devices) = host.input_devices() {
