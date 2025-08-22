@@ -208,12 +208,12 @@ jobs:
           # 2. Copy our custom Kotlin files
           KOTLIN_DEST_PATH="src-tauri/gen/android/app/src/main/java/com/blade/ledfx_rust"
           cp android-native/AudioVisualizer.kt $KOTLIN_DEST_PATH/
-          cp android-native/PermissionsPlugin.kt $KOTLIN_DEST_PATH/
+          cp android-native/PermissionPlugin.kt $KOTLIN_DEST_PATH/
           echo "--- Copied native Kotlin files ---"
 
           # 3. Inject the plugin loader into MainActivity.kt
           MAIN_ACTIVITY_PATH="$KOTLIN_DEST_PATH/MainActivity.kt"
-          PLUGIN_LOADER='    override fun loadPlugin(id: String): app.tauri.plugin.Plugin {\n        return if (id == "permissions") {\n            PermissionsPlugin(this)\n        } else {\n            super.loadPlugin(id)\n        }\n    }'
+          PLUGIN_LOADER='    override fun loadPlugin(id: String): app.tauri.plugin.Plugin {\n        return if (id == "permissions") {\n            PermissionPlugin(this)\n        } else {\n            super.loadPlugin(id)\n        }\n    }'
           sed -i "/class MainActivity : TauriActivity() {/a \    ${PLUGIN_LOADER}" $MAIN_ACTIVITY_PATH
           echo "--- Patched MainActivity.kt ---"
           cat $MAIN_ACTIVITY_PATH
