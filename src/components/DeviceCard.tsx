@@ -8,13 +8,14 @@ import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
-  Button, Card, CardActions, CardContent, CardHeader, FormControl,
-  InputLabel, MenuItem, Select, Typography
+  Button, Card, CardActions, CardContent, CardHeader, Chip, FormControl,
+  IconButton,
+  InputLabel, MenuItem, Select, Stack, Tooltip, Typography
 } from '@mui/material';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
-import { ExpandMore } from '@mui/icons-material';
+import { ArrowDownward, ArrowDropDown, ExpandMore, Info, InfoOutline } from '@mui/icons-material';
 import { EffectSettings } from './Effect.Settings';
 
 interface DeviceCardProps {
@@ -41,58 +42,65 @@ export const DeviceCard = React.memo(({
   onSettingChange,
 }: DeviceCardProps) => {
   return (
-    <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Card variant="outlined" sx={{ height: 'auto', width: '350px', display: 'flex', flexDirection: 'column' }}>
       <CardHeader
+        sx={{ p: "8px 8px"}}
         avatar={<LightbulbIcon color={isActive ? 'warning' : 'inherit'} />}
-        title={device.name}
-        subheader={device.ip_address}
+        title={<Stack direction="row" alignItems="center">
+          {device.name}
+          <Tooltip sx={{ ml: 2}} title={<>
+              <InfoLine label="Version" value={device.version} />
+              <InfoLine label="LEDs" value={`${device.leds.count}`} />
+              <InfoLine label="Chip" value={device.architecture} />
+              <InfoLine label="IP" value={device.ip_address} />
+          </>
+          }>
+            <span style={{ color: '#666', border: '1px solid #444', padding: '0px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: 16 }}>{'INFO'}</span>
+          </Tooltip></Stack>}          
+        action={
+        <IconButton
+          onClick={() => isActive ? onStop(device.ip_address) : onStart(device)}
+        >
+          {isActive ? <StopIcon /> : <PlayArrowIcon />}
+        </IconButton>
+        }
       />
-      <CardContent sx={{ flexGrow: 1 }}>
+      <CardContent sx={{ p: '8px', pb: '8px !important' }}>
         <EffectPreview ipAddress={device.ip_address} active={isActive} />
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Version: {device.version}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          LEDs: {device.leds.count}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Architecture: {device.architecture}
-        </Typography>
-        {schema && settings && <Accordion>
-          <AccordionSummary expandIcon={<ExpandMore />}>
-            <Typography>Effect Settings</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            
-              <EffectSettings schema={schema} settings={settings} onSettingChange={onSettingChange} />
-            
-          </AccordionDetails>
-        </Accordion>}
-      </CardContent>
-      <CardActions sx={{ justifyContent: 'space-between' }}>
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Effect</InputLabel>
           <Select
+            sx={{ mt: 1.5 }}
+            size='small'
+            fullWidth
             value={selectedEffect}
-            label="Effect"
             onChange={(e) => onEffectSelect(device, e.target.value)}
           >
             <MenuItem value="rainbow">Rainbow</MenuItem>
             <MenuItem value="scroll">Scroll</MenuItem>
             <MenuItem value="scan">Scan</MenuItem>
             <MenuItem value="bladepower">BladePower</MenuItem>
-          </Select>
-        </FormControl>
-        
-        <Button
-          size="small"
-          onClick={() => isActive ? onStop(device.ip_address) : onStart(device)}
-          startIcon={isActive ? <StopIcon /> : <PlayArrowIcon />}
-          color={isActive ? 'secondary' : 'primary'}
-        >
-          {isActive ? 'Stop' : 'Start'}
-        </Button>
-      </CardActions>
+          </Select>        
+        {schema && settings && <Accordion elevation={0} sx={{ mt: 1.5, border: '1px solid #444', borderRadius: '4px', overflow: 'hidden', minHeight: 40 }}>
+          <AccordionSummary expandIcon={<ArrowDropDown />} sx={{ pr: 0.8}}>
+            <Typography>Effect Settings</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+
+            <EffectSettings schema={schema} settings={settings} onSettingChange={onSettingChange} />
+
+          </AccordionDetails>
+        </Accordion>}
+      </CardContent>
     </Card>
   );
 });
+
+const InfoLine = ({ label, value }: { label: string; value: string }) => (
+  <Stack direction={'row'} justifyContent={'space-between'} alignItems={'center'}>
+    <Typography variant="body2" color="text.secondary" sx={{ mr: 2 }}>
+      {label}:
+    </Typography>
+    <Typography variant="body2" color="text.primary">
+      {value}
+    </Typography>
+  </Stack>
+);
