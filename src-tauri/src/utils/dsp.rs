@@ -36,10 +36,15 @@ pub fn generate_mel_filterbank(
         .map(|i| min_mel + i as f32 * (max_mel - min_mel) / (num_bands + 1) as f32)
         .collect();
     let hz_points: Vec<f32> = mel_points.into_iter().map(mel_to_hz).collect();
-    let fft_bins: Vec<usize> = hz_points
+    
+    // Ensure bin indices are unique to prevent zero-width filters
+    let mut fft_bins: Vec<usize> = hz_points
         .into_iter()
         .map(|hz| (hz * (fft_size as f32 / sample_rate as f32)).floor() as usize)
         .collect();
+    for i in 1..fft_bins.len() {
+        fft_bins[i] = fft_bins[i].max(fft_bins[i-1] + 1);
+    }
 
     let mut filters = Vec::with_capacity(num_bands);
 
@@ -49,16 +54,18 @@ pub fn generate_mel_filterbank(
         let center_bin = fft_bins[i + 1];
         let end_bin = fft_bins[i + 2];
 
-        // Create the rising slope of the triangle
         for k in start_bin..center_bin {
-            let weight = (k - start_bin) as f32 / (center_bin - start_bin) as f32;
-            filter.push((k, weight));
+            if center_bin > start_bin {
+                let weight = (k - start_bin) as f32 / (center_bin - start_bin) as f32;
+                filter.push((k, weight));
+            }
         }
 
-        // Create the falling slope of the triangle
         for k in center_bin..end_bin {
-            let weight = (end_bin - k) as f32 / (end_bin - center_bin) as f32;
-            filter.push((k, weight));
+            if end_bin > center_bin {
+                let weight = (end_bin - k) as f32 / (end_bin - center_bin) as f32;
+                filter.push((k, weight));
+            }
         }
         filters.push(filter);
     }

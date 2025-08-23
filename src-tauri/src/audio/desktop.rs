@@ -8,8 +8,6 @@ use std::f32::consts::PI;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
 
-// Keep these as our analysis target, but the input sample rate may differ.
-const ANALYSIS_SAMPLE_RATE: u32 = 44100;
 const FFT_SIZE: usize = 1024;
 const NUM_BANDS: usize = 128;
 const MIN_FREQ: f32 = 20.0;
@@ -114,15 +112,12 @@ fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Device {
 
 fn build_and_play_stream(
     device: Device,
-    config: SupportedStreamConfig, // FIX: We will now USE this parameter.
+    config: SupportedStreamConfig,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
 ) -> Stream {
-    // --- THIS IS THE FIX ---
-    // Log and use the configuration the device *actually* supports.
-    println!("Device supports config: {:?}", config);
     let sample_rate = config.sample_rate().0;
     let channels = config.channels();
-    let stream_config = config.config(); // This is the final, usable config.
+    let stream_config = config.config();
     
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(FFT_SIZE);
@@ -133,23 +128,25 @@ fn build_and_play_stream(
         .map(|i| 0.5 * (1.0 - (2.0 * PI * i as f32 / (FFT_SIZE - 1) as f32).cos()))
         .collect();
     
-    // The filterbank is now generated using the device's ACTUAL sample rate.
     let mel_filterbank =
         generate_mel_filterbank(FFT_SIZE / 2, sample_rate, NUM_BANDS, MIN_FREQ, MAX_FREQ);
 
-    let mut frame_counter: u64 = 0;
+    // --- START: NORMALIZATION STATE ---
+    // These values control how the signal is smoothed and scaled.
+    const SMOOTHING_FACTOR: f32 = 0.1; // Higher is smoother but less responsive
+    const AGC_ATTACK: f32 = 0.01;     // How fast the peak adapts upwards
+    const AGC_DECAY: f32 = 0.0005;    // How fast the peak adapts downwards
+
+    let mut smoothed_melbanks = vec![0.0; NUM_BANDS];
+    let mut peak_energy = 1.0; // Start at 1.0 to avoid division by zero
+    // --- END: NORMALIZATION STATE ---
 
     let data_callback = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-        // --- DATA PROCESSING LOGIC (REMAINS LARGELY THE SAME) ---
-        // We now process multi-channel audio by averaging the channels.
         for frame in data.chunks(channels as usize) {
             audio_samples.push(frame.iter().sum::<f32>() / channels as f32);
         }
 
         while audio_samples.len() >= FFT_SIZE {
-            frame_counter += 1;
-            let should_log = frame_counter % 43 == 0;
-
             for (i, sample) in audio_samples.iter().enumerate().take(FFT_SIZE) {
                 fft_buffer[i] = Complex::new(sample * window[i], 0.0);
             }
@@ -158,10 +155,10 @@ fn build_and_play_stream(
 
             let magnitudes: Vec<f32> = fft_buffer[0..FFT_SIZE / 2]
                 .iter()
-                .map(|c| c.norm_sqr())
+                .map(|c| c.norm_sqr().sqrt()) // Use sqrt for amplitude, not power
                 .collect();
 
-            let melbanks: Vec<f32> = mel_filterbank
+            let raw_melbanks: Vec<f32> = mel_filterbank
                 .iter()
                 .map(|filter| {
                     filter
@@ -171,12 +168,30 @@ fn build_and_play_stream(
                 })
                 .collect();
             
-            let final_melbanks: Vec<f32> = melbanks.iter().map(|&e| e.sqrt() * 5.0).collect();
-
-            if should_log {
-                let max = final_melbanks.iter().fold(f32::MIN, |a, &b| a.max(b));
-                println!("LOG: Max melbank value = {:.4}", max);
+            // --- START: NORMALIZATION PIPELINE ---
+            let mut current_max_energy = 0.0f32;
+            for i in 0..NUM_BANDS {
+                // 1. Apply exponential smoothing (IIR filter)
+                smoothed_melbanks[i] = (smoothed_melbanks[i] * SMOOTHING_FACTOR)
+                    + (raw_melbanks[i] * (1.0 - SMOOTHING_FACTOR));
+                
+                current_max_energy = current_max_energy.max(smoothed_melbanks[i]);
             }
+
+            // 2. Update the running peak (our simple AGC)
+            if current_max_energy > peak_energy {
+                peak_energy = peak_energy * (1.0 - AGC_ATTACK) + current_max_energy * AGC_ATTACK;
+            } else {
+                peak_energy = peak_energy * (1.0 - AGC_DECAY) + current_max_energy * AGC_DECAY;
+            }
+            peak_energy = peak_energy.max(1e-4); // Prevent peak from collapsing to zero
+
+            // 3. Normalize the smoothed melbanks by the running peak
+            let final_melbanks: Vec<f32> = smoothed_melbanks
+                .iter()
+                .map(|&val| (val / peak_energy).min(1.0)) // Divide and clamp to 1.0
+                .collect();
+            // --- END: NORMALIZATION PIPELINE ---
 
             if let Ok(mut data) = audio_data.lock() {
                 data.melbanks = final_melbanks;
@@ -188,12 +203,10 @@ fn build_and_play_stream(
 
     let err_callback = |err| eprintln!("an error occurred on stream: {}", err);
 
-    // Build the stream with the device's supported config. This will now succeed.
     let stream = device
         .build_input_stream(&stream_config, data_callback, err_callback, None)
-        .expect("Failed to build audio stream"); // This should no longer panic
+        .expect("Failed to build audio stream");
     stream.play().expect("Failed to play audio stream");
 
     stream
 }
-// --- END: CORRECTED FUNCTION ---
