@@ -2015,6 +2015,7 @@ dependencies = [
  "lazy_static",
  "mdns-sd",
  "once_cell",
+ "regex",
  "reqwest",
  "rustfft",
  "serde",

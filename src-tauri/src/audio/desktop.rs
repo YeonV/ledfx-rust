@@ -133,9 +133,9 @@ fn build_and_play_stream(
 
     // --- START: NORMALIZATION STATE ---
     // These values control how the signal is smoothed and scaled.
-    const SMOOTHING_FACTOR: f32 = 0.1; // Higher is smoother but less responsive
+    const SMOOTHING_FACTOR: f32 = 0.4; // Higher is smoother but less responsive
     const AGC_ATTACK: f32 = 0.01;     // How fast the peak adapts upwards
-    const AGC_DECAY: f32 = 0.0005;    // How fast the peak adapts downwards
+    const AGC_DECAY: f32 = 0.8;    // How fast the peak adapts downwards
 
     let mut smoothed_melbanks = vec![0.0; NUM_BANDS];
     let mut peak_energy = 1.0; // Start at 1.0 to avoid division by zero

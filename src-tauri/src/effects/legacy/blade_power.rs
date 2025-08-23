@@ -246,6 +246,7 @@ impl Effect for BladePowerLegacy {
             self.config = new_config;
             // The palette and v_channel will be lazily rebuilt on the next render call,
             // which is more efficient.
+            self.gradient_palette.clear()
         } else {
             eprintln!("Failed to deserialize settings for BladePowerLegacy");
         }

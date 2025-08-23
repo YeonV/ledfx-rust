@@ -13,15 +13,15 @@ pub struct BladePowerConfig {
 pub struct BladePower {
     config: BladePowerConfig,
     bar_level: f32,
-    pixel_count: u32, // pixel_count is part of the effect's state
+    // pixel_count: u32, // pixel_count is part of the effect's state
 }
 
 impl BladePower {
-    pub fn new(config: BladePowerConfig, pixel_count: u32) -> Self {
+    pub fn new(config: BladePowerConfig) -> Self {
         Self {
             config,
             bar_level: 0.0,
-            pixel_count,
+            // pixel_count,
         }
     }
 }

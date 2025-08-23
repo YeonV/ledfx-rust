@@ -72,9 +72,6 @@ pub fn run_effect_engine(
     let mut latest_frames: HashMap<String, Vec<u8>> = HashMap::new();
     let mut target_frame_duration = Duration::from_millis(1000 / 60);
     
-    let mut last_log_time = Instant::now();
-    let mut max_power_this_second = 0.0f32;
-
     loop {
         let frame_start = Instant::now();
         while let Ok(command) = command_rx.try_recv() {
@@ -97,7 +94,7 @@ pub fn run_effect_engine(
                                 Some(Box::new(legacy::blade_power::BladePowerLegacy::new(conf)))
                             }
                             EffectConfig::Blade(conf) => Some(Box::new(
-                                blade::blade_power::BladePower::new(conf, led_count),
+                                blade::blade_power::BladePower::new(conf),
                             )),
                         }
                     } else {
@@ -155,16 +152,6 @@ pub fn run_effect_engine(
 
         let latest_audio_data = audio_data.inner().0.lock().unwrap().clone();
         frame_count = frame_count.wrapping_add(1);
-
-        max_power_this_second = max_power_this_second.max(latest_audio_data.lows_power());
-        if last_log_time.elapsed() >= Duration::from_secs(1) {
-            println!(
-                "ENGINE DEBUG: Max lows_power in last second = {:.4}",
-                max_power_this_second
-            );
-            max_power_this_second = 0.0;
-            last_log_time = Instant::now();
-        }
 
         for (ip, active_effect) in &mut active_effects {
             let mut frame = vec![0u8; (active_effect.led_count * 3) as usize];

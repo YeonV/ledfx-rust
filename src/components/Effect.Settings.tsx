@@ -5,6 +5,8 @@ import {
   FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import type { EffectSetting } from '../bindings';
+import ReactGPicker from 'react-gcolor-picker';
+import GradientPicker from './GradientPicker/GradientPicker';
 
 interface EffectSettingsProps {
   schema: EffectSetting[];
@@ -13,9 +15,12 @@ interface EffectSettingsProps {
 }
 
 export function EffectSettings({ schema, settings, onSettingChange }: EffectSettingsProps) {
+  const onChange = (value: any) => {
+    console.log(value);
+  };
   return (
     <Box>
-      {schema.map((setting) => {
+      {schema.map((setting, index) => {
         // --- THE FIX: Use the defaultValue directly. It is already the primitive value. ---
         const value = settings[setting.id] ?? setting.defaultValue;
 
@@ -51,15 +56,19 @@ export function EffectSettings({ schema, settings, onSettingChange }: EffectSett
             );
           case 'colorPicker':
             return (
-              <TextField
+              <GradientPicker
+                pickerBgColor={String(value)}
                 key={setting.id}
-                label={setting.name}
-                type="color"
-                value={String(value)} // Ensure value is a string
-                onChange={(e) => onSettingChange(setting.id, e.target.value)}
-                variant="standard"
-                fullWidth
-                sx={{ mt: 2 }}
+                title={setting.name}
+                index={index}
+                isGradient={true}
+                // wrapperStyle={wrapperStyle}
+                // colors={colors}
+                // handleAddGradient={handleAddGradient}
+                sendColorToVirtuals={(color: any) => {
+                  onSettingChange(setting.id, color);
+                }}
+                // showHex={showHex}
               />
             );
           case 'select':
