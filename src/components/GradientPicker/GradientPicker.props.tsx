@@ -1,4 +1,4 @@
-import { CSSProperties } from '@mui/styles'
+import { CSSProperties } from "@mui/material"
 
 export interface GradientPickerProps {
   pickerBgColor: string
