@@ -8,7 +8,8 @@ use std::f32::consts::PI;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
 
-const SAMPLE_RATE: u32 = 44100;
+// Keep these as our analysis target, but the input sample rate may differ.
+const ANALYSIS_SAMPLE_RATE: u32 = 44100;
 const FFT_SIZE: usize = 1024;
 const NUM_BANDS: usize = 128;
 const MIN_FREQ: f32 = 20.0;
@@ -113,14 +114,15 @@ fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Device {
 
 fn build_and_play_stream(
     device: Device,
-    _config: SupportedStreamConfig,
+    config: SupportedStreamConfig, // FIX: We will now USE this parameter.
     audio_data: Arc<Mutex<AudioAnalysisData>>,
 ) -> Stream {
-    let stream_config = cpal::StreamConfig {
-        channels: 1,
-        sample_rate: cpal::SampleRate(SAMPLE_RATE),
-        buffer_size: cpal::BufferSize::Default,
-    };
+    // --- THIS IS THE FIX ---
+    // Log and use the configuration the device *actually* supports.
+    println!("Device supports config: {:?}", config);
+    let sample_rate = config.sample_rate().0;
+    let channels = config.channels();
+    let stream_config = config.config(); // This is the final, usable config.
     
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(FFT_SIZE);
@@ -130,90 +132,50 @@ fn build_and_play_stream(
     let window: Vec<f32> = (0..FFT_SIZE)
         .map(|i| 0.5 * (1.0 - (2.0 * PI * i as f32 / (FFT_SIZE - 1) as f32).cos()))
         .collect();
+    
+    // The filterbank is now generated using the device's ACTUAL sample rate.
     let mel_filterbank =
-        generate_mel_filterbank(FFT_SIZE / 2, SAMPLE_RATE, NUM_BANDS, MIN_FREQ, MAX_FREQ);
+        generate_mel_filterbank(FFT_SIZE / 2, sample_rate, NUM_BANDS, MIN_FREQ, MAX_FREQ);
 
-    // --- START: ADDED LOGGING ---
     let mut frame_counter: u64 = 0;
-    // --- END: ADDED LOGGING ---
 
     let data_callback = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-        audio_samples.extend_from_slice(data);
+        // --- DATA PROCESSING LOGIC (REMAINS LARGELY THE SAME) ---
+        // We now process multi-channel audio by averaging the channels.
+        for frame in data.chunks(channels as usize) {
+            audio_samples.push(frame.iter().sum::<f32>() / channels as f32);
+        }
 
         while audio_samples.len() >= FFT_SIZE {
             frame_counter += 1;
-            // Only log once per second (assuming ~43 FFTs/sec) to avoid spam
             let should_log = frame_counter % 43 == 0;
-            
-            if should_log { println!("\n--- NEW AUDIO CHUNK (Frame {}) ---", frame_counter); }
-
-            // --- LOG 1: RAW INCOMING SAMPLES ---
-            if should_log {
-                let sample_slice = &audio_samples[0..10]; // Log first 10 samples
-                let min = audio_samples.iter().fold(f32::MAX, |a, &b| a.min(b));
-                let max = audio_samples.iter().fold(f32::MIN, |a, &b| a.max(b));
-                println!("LOG 1: Raw Samples (Min: {:.4}, Max: {:.4}) | First 10: {:?}", min, max, sample_slice);
-            }
 
             for (i, sample) in audio_samples.iter().enumerate().take(FFT_SIZE) {
                 fft_buffer[i] = Complex::new(sample * window[i], 0.0);
             }
 
-            // --- LOG 2: SAMPLES AFTER WINDOWING ---
-            if should_log {
-                let sample_slice = &fft_buffer[0..5]; // Log first 5 complex numbers
-                println!("LOG 2: After Hann Window | First 5: {:?}", sample_slice);
-            }
-
             fft.process(&mut fft_buffer);
-
-            // --- LOG 3: FFT OUTPUT ---
-            if should_log {
-                let fft_slice = &fft_buffer[0..5]; // Log first 5 complex numbers
-                println!("LOG 3: FFT Output | First 5: {:?}", fft_slice);
-            }
 
             let magnitudes: Vec<f32> = fft_buffer[0..FFT_SIZE / 2]
                 .iter()
                 .map(|c| c.norm_sqr())
                 .collect();
-            
-            // --- LOG 4: MAGNITUDES (POWER) ---
-            if should_log {
-                let mag_slice = &magnitudes[0..10]; // Log first 10 magnitudes
-                let sum = magnitudes.iter().sum::<f32>();
-                let max = magnitudes.iter().fold(f32::MIN, |a, &b| a.max(b));
-                println!("LOG 4: Magnitudes (Sum: {:.4}, Max: {:.4}) | First 10: {:?}", sum, max, mag_slice);
-            }
 
             let melbanks: Vec<f32> = mel_filterbank
                 .iter()
                 .map(|filter| {
-                    let band_energy = filter
+                    filter
                         .iter()
                         .map(|&(bin_index, weight)| magnitudes[bin_index] * weight)
-                        .sum::<f32>();
-                    band_energy
+                        .sum::<f32>()
                 })
                 .collect();
-                
-            // --- LOG 5: MELBANK ENERGY (BEFORE SCALING) ---
-            if should_log {
-                let mel_slice = &melbanks[0..10]; // Log first 10 melbank energies
-                let sum = melbanks.iter().sum::<f32>();
-                let max = melbanks.iter().fold(f32::MIN, |a, &b| a.max(b));
-                println!("LOG 5: Melbank Energy (Sum: {:.4}, Max: {:.4}) | First 10: {:?}", sum, max, mel_slice);
-            }
             
-            // Re-apply the linear scaling from our last test for the final output
             let final_melbanks: Vec<f32> = melbanks.iter().map(|&e| e.sqrt() * 5.0).collect();
 
-            // --- LOG 6: FINAL MELBANK VALUES ---
             if should_log {
-                let final_slice = &final_melbanks[0..10];
-                let sum = final_melbanks.iter().sum::<f32>();
                 let max = final_melbanks.iter().fold(f32::MIN, |a, &b| a.max(b));
-                println!("LOG 6: Final Melbanks (Sum: {:.4}, Max: {:.4}) | First 10: {:?}", sum, max, final_slice);
+                println!("LOG: Max melbank value = {:.4}", max);
             }
 
             if let Ok(mut data) = audio_data.lock() {
@@ -224,12 +186,14 @@ fn build_and_play_stream(
         }
     };
 
-    let err_callback = |err| eprintln!("an error occurred on the audio stream: {}", err);
+    let err_callback = |err| eprintln!("an error occurred on stream: {}", err);
 
+    // Build the stream with the device's supported config. This will now succeed.
     let stream = device
         .build_input_stream(&stream_config, data_callback, err_callback, None)
-        .expect("Failed to build audio stream");
+        .expect("Failed to build audio stream"); // This should no longer panic
     stream.play().expect("Failed to play audio stream");
 
     stream
 }
+// --- END: CORRECTED FUNCTION ---
