@@ -15,7 +15,7 @@ export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
 
   useEffect(() => {
     commands.subscribeToFrames(ipAddress);
-    console.log(`Subscribed to frames for ${ipAddress}`);
+    // console.log(`Subscribed to frames for ${ipAddress}`);
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -65,7 +65,7 @@ export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
     return () => {
       unsubscribeFromStore();
       commands.unsubscribeFromFrames(ipAddress);
-      console.log(`Unsubscribed from frames for ${ipAddress}`);
+      // console.log(`Unsubscribed from frames for ${ipAddress}`);
     };
   }, [active, ipAddress]);
 

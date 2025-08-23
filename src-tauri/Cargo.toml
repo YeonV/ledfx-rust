@@ -31,6 +31,8 @@ specta-typescript = "0.0.9"
 once_cell = "1.19.0"
 as-any = "0.3.2"
 tauri-plugin-os = "2"
+apodize = "1.0.0"
+regex = "1.11.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = { version = "0.21.1", features = ["invocation"] }

@@ -28,6 +28,7 @@
     "@tauri-apps/plugin-os": "~2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-gcolor-picker": "^1.3.3",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

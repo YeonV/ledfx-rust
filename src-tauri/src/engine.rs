@@ -1,8 +1,6 @@
-// src-tauri/src/engine.rs
-
 use crate::audio::SharedAudioData;
 use crate::effects::{blade, legacy, simple, Effect};
-use crate::utils::send_ddp_packet;
+use crate::utils::ddp::send_ddp_packet;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::{HashMap, HashSet};
@@ -12,8 +10,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
-// The ActiveEffect no longer needs led_count, as the effect instance
-// now holds its own configuration and state.
 struct ActiveEffect {
     effect: Box<dyn Effect>,
     led_count: u32,
@@ -30,8 +26,6 @@ pub fn get_legacy_effect_schema(
     }
 }
 
-// This is the type-safe enum that the frontend will send.
-// It uses the full path to the config structs to be explicit.
 #[derive(Deserialize, Serialize, Type, Clone)]
 #[serde(tag = "mode", content = "config")]
 pub enum EffectConfig {
@@ -41,7 +35,6 @@ pub enum EffectConfig {
     Blade(crate::effects::blade::blade_power::BladePowerConfig),
 }
 
-// The StartEffect command is now upgraded to use the type-safe config.
 pub enum EngineCommand {
     StartEffect {
         ip_address: String,
@@ -78,9 +71,7 @@ pub fn run_effect_engine(
     let mut frame_count: u8 = 0;
     let mut latest_frames: HashMap<String, Vec<u8>> = HashMap::new();
     let mut target_frame_duration = Duration::from_millis(1000 / 60);
-    let mut last_log_time = Instant::now();
-    let mut max_volume_this_second = 0.0f32;
-
+    
     loop {
         let frame_start = Instant::now();
         while let Ok(command) = command_rx.try_recv() {
@@ -99,15 +90,14 @@ pub fn run_effect_engine(
 
                     let effect: Option<Box<dyn Effect>> = if let Some(config_data) = config {
                         match config_data {
-                            EffectConfig::Legacy(conf) => Some(Box::new(
-                                legacy::blade_power::BladePowerLegacy::new(conf, led_count),
-                            )),
+                            EffectConfig::Legacy(conf) => {
+                                Some(Box::new(legacy::blade_power::BladePowerLegacy::new(conf)))
+                            }
                             EffectConfig::Blade(conf) => Some(Box::new(
-                                blade::blade_power::BladePower::new(conf, led_count),
+                                blade::blade_power::BladePower::new(conf),
                             )),
                         }
                     } else {
-                        // --- THE FIX: Create simple effects from the correct module ---
                         match effect_id.as_str() {
                             "scan" => Some(Box::new(simple::ScanEffect {
                                 position: 0,
@@ -125,10 +115,8 @@ pub fn run_effect_engine(
                     }
                 }
                 EngineCommand::StopEffect { ip_address } => {
-                    if active_effects.remove(&ip_address).is_some() {
-                        // This assumes a max LED count for the black frame.
-                        // A better solution would be to know the led_count of the stopped effect.
-                        let black_data = vec![0; 300 * 3];
+                    if let Some(removed) = active_effects.remove(&ip_address) {
+                        let black_data = vec![0; (removed.led_count * 3) as usize];
                         let destination = format!("{}:4048", ip_address);
                         let _ = send_ddp_packet(&socket, &destination, 0, &black_data, 0);
                         latest_frames.remove(&ip_address);
@@ -152,14 +140,10 @@ pub fn run_effect_engine(
                     if let Some(active_effect) = active_effects.get_mut(&ip_address) {
                         if let Some(config_enum) = settings {
                             let config_value = match config_enum {
-                                EffectConfig::Legacy(config) => {
-                                    serde_json::to_value(config).unwrap()
-                                }
-                                EffectConfig::Blade(config) => {
-                                    serde_json::to_value(config).unwrap()
-                                }
+                                EffectConfig::Legacy(config) => serde_json::to_value(config).unwrap(),
+                                EffectConfig::Blade(config) => serde_json::to_value(config).unwrap(),
                             };
-                            active_effect.effect.update_settings(config_value);
+                            active_effect.effect.update_config(config_value);
                         }
                     }
                 }
@@ -169,25 +153,13 @@ pub fn run_effect_engine(
         let latest_audio_data = audio_data.inner().0.lock().unwrap().clone();
         frame_count = frame_count.wrapping_add(1);
 
-        max_volume_this_second = max_volume_this_second.max(latest_audio_data.volume);
-        if last_log_time.elapsed() >= Duration::from_secs(1) {
-            // println!(
-            //     "ENGINE DEBUG: Max volume in last second = {:.4}",
-            //     max_volume_this_second
-            // );
-            max_volume_this_second = 0.0;
-            last_log_time = Instant::now();
-        }
-
         for (ip, active_effect) in &mut active_effects {
-            // --- THE FIX: Remove all post-processing logic from the engine ---
-            let data = active_effect
-                .effect
-                .render_frame(active_effect.led_count, &latest_audio_data);
+            let mut frame = vec![0u8; (active_effect.led_count * 3) as usize];
+            active_effect.effect.render(&latest_audio_data, &mut frame);
 
             let destination = format!("{}:4048", ip);
-            let _ = send_ddp_packet(&socket, &destination, 0, &data, frame_count);
-            latest_frames.insert(ip.clone(), data);
+            let _ = send_ddp_packet(&socket, &destination, 0, &frame, frame_count);
+            latest_frames.insert(ip.clone(), frame);
         }
 
         let payload: HashMap<String, Vec<u8>> = latest_frames
@@ -207,7 +179,8 @@ pub fn run_effect_engine(
     }
 }
 
-// The start_effect command is now fully type-safe.
+// --- TAURI COMMANDS ---
+
 #[tauri::command]
 #[specta::specta]
 pub fn start_effect(
@@ -228,7 +201,6 @@ pub fn start_effect(
     Ok(())
 }
 
-// The other commands remain unchanged from your ground truth.
 #[tauri::command]
 #[specta::specta]
 pub fn stop_effect(

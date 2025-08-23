@@ -84,6 +84,14 @@ async updateEffectSettings(ipAddress: string, settings: EffectConfig | null) : P
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async getAudioAnalysis() : Promise<Result<AudioAnalysisData, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_audio_analysis") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -97,10 +105,9 @@ async updateEffectSettings(ipAddress: string, settings: EffectConfig | null) : P
 
 /** user-defined types **/
 
+export type AudioAnalysisData = { melbanks: number[] }
 export type AudioDevice = { name: string }
-export type AudioReactiveConfig = { frequency_range: string }
-export type BaseEffectConfig = { brightness: number; blur: number; mirror: boolean; flip: boolean }
-export type BladePowerConfig = { base: BaseEffectConfig; audio: AudioReactiveConfig; decay: number; sensitivity: number }
+export type BladePowerConfig = { sensitivity: number }
 export type BladePowerLegacyConfig = { mirror: boolean; blur: number; decay: number; multiplier: number; background_color: string; frequency_range: string; gradient: string; flip: boolean }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean

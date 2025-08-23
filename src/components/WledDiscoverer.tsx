@@ -67,7 +67,7 @@ export function WledDiscoverer() {
   >({});
   const [openSettings, setOpenSettings] = useState(false);
 
-  console.log(audioDevices)
+  // console.log(audioDevices)
   useEffect(() => {
     const setupAudio = async () => {
       const result = await commands.getAudioDevices();

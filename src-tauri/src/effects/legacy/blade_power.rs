@@ -1,9 +1,8 @@
-// src-tauri/src/effects/legacy/blade_power.rs
-
 use crate::audio::AudioAnalysisData;
 use crate::effects::Effect;
-use crate::utils::parse_gradient;
+use crate::utils::colors::parse_gradient;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use specta::Type;
 
 #[derive(Serialize, Type, Clone)]
@@ -14,7 +13,6 @@ pub enum DefaultValue {
     Bool(bool),
 }
 
-// --- THE FIX: A consistent, tagged enum for all controls ---
 #[derive(Serialize, Type, Clone)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Control {
@@ -53,7 +51,7 @@ pub fn get_schema() -> Vec<EffectSetting> {
             id: "mirror".to_string(),
             name: "Mirror".to_string(),
             description: "Mirror the effect".to_string(),
-            control: Control::Checkbox, // No change needed here
+            control: Control::Checkbox,
             default_value: DefaultValue::Bool(false),
         },
         EffectSetting {
@@ -93,7 +91,7 @@ pub fn get_schema() -> Vec<EffectSetting> {
             id: "background_color".to_string(),
             name: "Background Color".to_string(),
             description: "Color of Background".to_string(),
-            control: Control::ColorPicker, // No change needed here
+            control: Control::ColorPicker,
             default_value: DefaultValue::String("#000000".to_string()),
         },
         EffectSetting {
@@ -105,7 +103,6 @@ pub fn get_schema() -> Vec<EffectSetting> {
                     "Lows (beat+bass)".to_string(),
                     "Mids".to_string(),
                     "High".to_string(),
-                    "Bass".to_string(),
                 ],
             },
             default_value: DefaultValue::String("Lows (beat+bass)".to_string()),
@@ -114,7 +111,7 @@ pub fn get_schema() -> Vec<EffectSetting> {
             id: "gradient".to_string(),
             name: "Gradient".to_string(),
             description: "Color gradient for the effect".to_string(),
-            control: Control::ColorPicker, // A gradient picker would go here
+            control: Control::ColorPicker,
             default_value: DefaultValue::String(
                 "linear-gradient(90deg, #ff0000 0%, #0000ff 100%)".to_string(),
             ),
@@ -131,58 +128,50 @@ pub fn get_schema() -> Vec<EffectSetting> {
 
 pub struct BladePowerLegacy {
     pub config: BladePowerLegacyConfig,
-    pixel_count: u32,
     gradient_palette: Vec<[u8; 3]>,
     v_channel: Vec<f32>,
 }
 
 impl BladePowerLegacy {
-    pub fn new(config: BladePowerLegacyConfig, pixel_count: u32) -> Self {
-        let mut instance = Self {
+    pub fn new(config: BladePowerLegacyConfig) -> Self {
+        Self {
             config,
-            pixel_count,
             gradient_palette: Vec::new(),
-            v_channel: vec![0.0; pixel_count as usize],
-        };
-        instance.rebuild_palette();
-        instance
+            v_channel: Vec::new(),
+        }
     }
 
-    fn rebuild_palette(&mut self) {
-        // --- THE FIX: The correct order of operations ---
+    fn rebuild_palette(&mut self, pixel_count: usize) {
+        if pixel_count == 0 { return; }
+        if self.v_channel.len() != pixel_count {
+            self.v_channel = vec![0.0; pixel_count];
+        }
 
-        // 1. Parse the full gradient.
-        let mut base_palette = parse_gradient(&self.config.gradient, self.pixel_count as usize);
+        let mut base_palette = parse_gradient(&self.config.gradient, pixel_count);
 
-        // 2. Flip the full gradient first if flip is on.
         if self.config.flip {
             base_palette.reverse();
         }
 
         if self.config.mirror {
-            let half_len = (self.pixel_count as f32 / 2.0).ceil() as usize;
-
-            // 3. Squeeze the (potentially flipped) base palette into the first half.
+            let half_len = (pixel_count as f32 / 2.0).ceil() as usize;
             let squeezed_palette = resample_palette(&base_palette, half_len);
+            let mut final_palette = vec![[0, 0, 0]; pixel_count];
 
-            let mut final_palette = vec![[0, 0, 0]; self.pixel_count as usize];
-
-            // 4. Build the final mirrored palette from the squeezed version.
             for i in 0..half_len {
                 let color = squeezed_palette[i];
                 final_palette[i] = color;
-                final_palette[self.pixel_count as usize - 1 - i] = color;
+                if (pixel_count - 1 - i) < final_palette.len() {
+                    final_palette[pixel_count - 1 - i] = color;
+                }
             }
-
             self.gradient_palette = final_palette;
         } else {
-            // If not mirroring, just use the (potentially flipped) base palette.
             self.gradient_palette = base_palette;
         }
     }
 }
 
-// --- THE FIX: This function now correctly returns the new palette ---
 fn resample_palette(palette: &[[u8; 3]], new_len: usize) -> Vec<[u8; 3]> {
     if palette.is_empty() || new_len == 0 {
         return Vec::new();
@@ -198,13 +187,26 @@ fn resample_palette(palette: &[[u8; 3]], new_len: usize) -> Vec<[u8; 3]> {
 }
 
 impl Effect for BladePowerLegacy {
-    fn render_frame(&mut self, _pixel_count: u32, audio_data: &AudioAnalysisData) -> Vec<u8> {
-        let bar_level = (audio_data.volume * self.config.multiplier * 2.0).min(1.0);
+    fn render(&mut self, audio_data: &AudioAnalysisData, frame: &mut [u8]) {
+        let pixel_count = frame.len() / 3;
+        if pixel_count == 0 { return; }
+
+        if self.gradient_palette.len() != pixel_count || self.v_channel.len() != pixel_count {
+            self.rebuild_palette(pixel_count);
+        }
+
+        let power = match self.config.frequency_range.as_str() {
+            "Mids" => audio_data.mids_power(),
+            "High" => audio_data.highs_power(),
+            _ => audio_data.lows_power(),
+        };
+        
+        let bar_level = (power * self.config.multiplier * 2.0).min(1.0);
 
         let bar_idx = if self.config.mirror {
-            (bar_level * (self.pixel_count as f32 / 2.0)) as usize
+            (bar_level * (pixel_count as f32 / 2.0)) as usize
         } else {
-            (bar_level * self.pixel_count as f32) as usize
+            (bar_level * pixel_count as f32) as usize
         };
 
         let decay_factor = self.config.decay / 2.0 + 0.45;
@@ -215,7 +217,9 @@ impl Effect for BladePowerLegacy {
         if self.config.mirror {
             for i in 0..bar_idx {
                 self.v_channel[i] = 1.0;
-                self.v_channel[self.pixel_count as usize - 1 - i] = 1.0;
+                if (pixel_count - 1 - i) < self.v_channel.len() {
+                    self.v_channel[pixel_count - 1 - i] = 1.0;
+                }
             }
         } else {
             for i in 0..bar_idx {
@@ -223,8 +227,7 @@ impl Effect for BladePowerLegacy {
             }
         }
 
-        let mut rgb_pixels = Vec::with_capacity((self.pixel_count * 3) as usize);
-        for i in 0..self.pixel_count as usize {
+        for i in 0..pixel_count {
             let base_color = self.gradient_palette[i];
             let brightness = self.v_channel[i];
 
@@ -232,16 +235,18 @@ impl Effect for BladePowerLegacy {
             let g = (base_color[1] as f32 * brightness) as u8;
             let b = (base_color[2] as f32 * brightness) as u8;
 
-            rgb_pixels.extend_from_slice(&[r, g, b]);
+            frame[i * 3] = r;
+            frame[i * 3 + 1] = g;
+            frame[i * 3 + 2] = b;
         }
-
-        rgb_pixels
     }
 
-    fn update_settings(&mut self, settings: serde_json::Value) {
-        if let Ok(new_config) = serde_json::from_value(settings) {
+    fn update_config(&mut self, config: Value) {
+        if let Ok(new_config) = serde_json::from_value(config) {
             self.config = new_config;
-            self.rebuild_palette();
+            // The palette and v_channel will be lazily rebuilt on the next render call,
+            // which is more efficient.
+            self.gradient_palette.clear()
         } else {
             eprintln!("Failed to deserialize settings for BladePowerLegacy");
         }

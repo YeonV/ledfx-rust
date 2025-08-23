@@ -1,13 +1,106 @@
-// src-tauri/src/utils/colors.rs
+use regex::Regex;
 
-// This is a simplified parser. A real one would handle multiple color stops.
-pub fn parse_gradient(_gradient_str: &str, num_leds: usize) -> Vec<[u8; 3]> {
-    let mut palette = Vec::with_capacity(num_leds);
-    for i in 0..num_leds {
-        let ratio = i as f32 / (num_leds.saturating_sub(1)) as f32;
-        let r = (255.0 * (1.0 - ratio)) as u8;
-        let b = (255.0 * ratio) as u8;
-        palette.push([r, 0, b]);
+// Main public function. Takes a CSS string and generates a palette of a given size.
+pub fn parse_gradient(gradient_str: &str, size: usize) -> Vec<[u8; 3]> {
+    // If it's a simple color (hex or rgb), create a solid palette.
+    if !gradient_str.starts_with("linear-gradient") {
+        let color = parse_single_color(gradient_str).unwrap_or([0, 0, 0]);
+        return vec![color; size];
+    }
+
+    // It's a gradient, so parse the color stops.
+    let stops = parse_color_stops(gradient_str);
+    if stops.is_empty() {
+        return vec![[0, 0, 0]; size]; // Return black if parsing fails
+    }
+
+    // Generate the final palette by interpolating between the stops.
+    generate_palette_from_stops(&stops, size)
+}
+
+// Helper to parse a single color token (hex, short-hex, or rgb).
+fn parse_single_color(color_str: &str) -> Option<[u8; 3]> {
+    let s = color_str.trim();
+    if s.starts_with('#') {
+        let hex = s.strip_prefix('#').unwrap();
+        if hex.len() == 6 {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            Some([r, g, b])
+        } else if hex.len() == 3 {
+            let r = u8::from_str_radix(&hex[0..1], 16).ok()? * 17;
+            let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
+            let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
+            Some([r, g, b])
+        } else {
+            None
+        }
+    } else if s.starts_with("rgb") {
+        let inner = s.strip_prefix("rgb(")?.strip_suffix(")")?;
+        let mut parts = inner.split(',').map(|p| p.trim().parse::<u8>());
+        let r = parts.next()?.ok()?;
+        let g = parts.next()?.ok()?;
+        let b = parts.next()?.ok()?;
+        Some([r, g, b])
+    } else {
+        None
+    }
+}
+
+// Uses regex to find all color stops in a `linear-gradient` string.
+fn parse_color_stops(gradient_str: &str) -> Vec<(f32, [u8; 3])> {
+    // This regex captures the color part (hex or rgb) and its percentage.
+    let re = Regex::new(r"(#[0-9a-fA-F]{3,6}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\))\s+([\d.]+)%").unwrap();
+    let mut stops: Vec<(f32, [u8; 3])> = re.captures_iter(gradient_str).filter_map(|cap| {
+        let color_str = cap.get(1).map_or("", |m| m.as_str());
+        let percent_str = cap.get(2).map_or("", |m| m.as_str());
+        
+        let color = parse_single_color(color_str)?;
+        let percent = percent_str.parse::<f32>().ok()? / 100.0;
+        
+        Some((percent, color))
+    }).collect();
+
+    // Ensure stops are sorted by percentage.
+    stops.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    stops
+}
+
+// Generates the final palette by interpolating between the parsed color stops.
+fn generate_palette_from_stops(stops: &[(f32, [u8; 3])], size: usize) -> Vec<[u8; 3]> {
+    if stops.is_empty() || size == 0 {
+        return Vec::new();
+    }
+    if stops.len() == 1 {
+        return vec![stops[0].1; size];
+    }
+
+    let mut palette = Vec::with_capacity(size);
+
+    for i in 0..size {
+        let pos = i as f32 / (size - 1) as f32;
+        
+        // Find the two stops the current position is between.
+        let end_stop_idx = stops.iter().position(|s| s.0 >= pos).unwrap_or(stops.len() - 1);
+        let start_stop_idx = if end_stop_idx > 0 { end_stop_idx - 1 } else { 0 };
+
+        let start_stop = &stops[start_stop_idx];
+        let end_stop = &stops[end_stop_idx];
+
+        // Calculate how far we are between the start and end stops.
+        let t = if (end_stop.0 - start_stop.0).abs() < 1e-6 {
+            0.0 // Avoid division by zero if stops are at the same position
+        } else {
+            (pos - start_stop.0) / (end_stop.0 - start_stop.0)
+        };
+
+        // Linear interpolation for each color channel.
+        let r = start_stop.1[0] as f32 * (1.0 - t) + end_stop.1[0] as f32 * t;
+        let g = start_stop.1[1] as f32 * (1.0 - t) + end_stop.1[1] as f32 * t;
+        let b = start_stop.1[2] as f32 * (1.0 - t) + end_stop.1[2] as f32 * t;
+
+        palette.push([r as u8, g as u8, b as u8]);
     }
     palette
 }

@@ -5,10 +5,11 @@ import { WledDiscoverer } from "./components/WledDiscoverer";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
 import "./App.css";
+import MelbankVisualizer from "./components/MelbankVisualizer";
 
 function App() {
   useEffect(() => {
-    console.log("Setting up global event listener for engine-tick...");
+    // console.log("Setting up global event listener for engine-tick...");
     const unlistenPromise = listen<Record<string, number[]>>('engine-tick', (event) => {
       useFrameStore.setState({ frames: event.payload });
     });
@@ -20,6 +21,7 @@ function App() {
   return (
     <main>
       <WledDiscoverer />
+      <MelbankVisualizer />
     </main>
   );
 }
