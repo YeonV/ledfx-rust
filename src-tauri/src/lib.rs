@@ -1,5 +1,3 @@
-// src-tauri/src/lib.rs
-
 pub mod audio;
 pub mod effects;
 pub mod engine;
@@ -14,6 +12,31 @@ use std::thread;
 use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
+// Define a function that configures our builder. This prevents code duplication.
+fn configure_builder() -> Builder<tauri::Wry> {
+    Builder::<tauri::Wry>::new()
+        .commands(collect_commands![
+            wled::discover_wled,
+            engine::start_effect,
+            engine::stop_effect,
+            engine::subscribe_to_frames,
+            engine::unsubscribe_from_frames,
+            engine::set_target_fps,
+            audio::get_audio_devices,
+            audio::set_audio_device,
+            engine::get_legacy_effect_schema,
+            engine::update_effect_settings,
+            audio::get_audio_analysis
+        ])
+        .typ::<wled::WledDevice>()
+        .typ::<wled::LedsInfo>()
+        .typ::<wled::MapInfo>()
+        .typ::<audio::AudioDevice>()
+        .typ::<legacy::blade_power::EffectSetting>()
+        .typ::<legacy::blade_power::Control>()
+        .typ::<engine::EffectConfig>()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let (engine_command_tx, engine_command_rx) = mpsc::channel::<engine::EngineCommand>();
@@ -21,35 +44,19 @@ pub fn run() {
     let audio_data = audio::SharedAudioData::default();
     let audio_data_clone_for_thread = audio_data.0.clone();
 
-    let builder = {
-        // --- THE FIX: A single, unconditional list of commands ---
-        let builder = Builder::<tauri::Wry>::new()
-            .commands(collect_commands![
-                wled::discover_wled,
-                engine::start_effect,
-                engine::stop_effect,
-                engine::subscribe_to_frames,
-                engine::unsubscribe_from_frames,
-                engine::set_target_fps,
-                audio::get_audio_devices,
-                audio::set_audio_device,
-                engine::get_legacy_effect_schema,
-                engine::update_effect_settings
-            ])
-            .typ::<wled::WledDevice>()
-            .typ::<wled::LedsInfo>()
-            .typ::<wled::MapInfo>()
-            .typ::<audio::AudioDevice>()
-            .typ::<legacy::blade_power::EffectSetting>()
-            .typ::<legacy::blade_power::Control>();
-
-        #[cfg(debug_assertions)]
-        builder
+    // In debug mode, create a builder SOLELY for exporting.
+    // This builder is created, used for the export, and then discarded.
+    // It has NO effect on the rest of the function.
+    #[cfg(debug_assertions)]
+    {
+        configure_builder()
             .export(Typescript::default(), "../src/bindings.ts")
             .expect("Failed to export typescript bindings");
+    }
 
-        builder
-    };
+    // Create the REAL builder that will be used to build the application.
+    // This is now completely separate from the export logic.
+    let builder = configure_builder();
 
     let mut tauri_builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())

@@ -1,14 +1,15 @@
-// src-tauri/src/effects/mod.rs
-
 use crate::audio::AudioAnalysisData;
-use as_any::AsAny;
-
-// --- THE FIX: Add pixel_count back to the render_frame method ---
-pub trait Effect: Send + AsAny {
-    fn render_frame(&mut self, pixel_count: u32, audio_data: &AudioAnalysisData) -> Vec<u8>;
-    fn update_settings(&mut self, settings: serde_json::Value);
-}
+use serde_json::Value;
 
 pub mod blade;
 pub mod legacy;
 pub mod simple;
+
+// This is our single source of truth for what an effect is.
+pub trait Effect: Send + Sync {
+    /// Renders a single frame of the effect into the provided buffer.
+    fn render(&mut self, audio_data: &AudioAnalysisData, frame: &mut [u8]);
+
+    /// Updates the effect's configuration from a JSON value.
+    fn update_config(&mut self, config: Value);
+}

@@ -5,7 +5,8 @@ use cpal::{Device, Stream, SupportedStreamConfig};
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
 use std::sync::{mpsc, Arc, Mutex};
-use super::devices::find_device; // Import from the sibling module
+
+use crate::audio::desktop::find_device;
 
 #[derive(Default, Clone)]
 pub struct AudioAnalysisData {

@@ -5,6 +5,7 @@ import { WledDiscoverer } from "./components/WledDiscoverer";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
 import "./App.css";
+import MelbankVisualizer from "./components/MelbankVisualizer";
 
 function App() {
   useEffect(() => {
@@ -20,6 +21,7 @@ function App() {
   return (
     <main>
       <WledDiscoverer />
+      <MelbankVisualizer />
     </main>
   );
 }
