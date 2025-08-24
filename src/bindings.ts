@@ -53,22 +53,6 @@ async setTargetFps(fps: number) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async getAudioDevices() : Promise<Result<AudioDevice[], string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_audio_devices") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async setAudioDevice(deviceName: string) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("set_audio_device", { deviceName }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async getLegacyEffectSchema(effectId: string) : Promise<Result<EffectSetting[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_legacy_effect_schema", { effectId }) };
@@ -85,9 +69,41 @@ async updateEffectSettings(ipAddress: string, settings: EffectConfig | null) : P
     else return { status: "error", error: e  as any };
 }
 },
+async getAudioDevices() : Promise<Result<AudioDevice[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_audio_devices") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setAudioDevice(deviceName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_audio_device", { deviceName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getAudioAnalysis() : Promise<Result<AudioAnalysisData, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_audio_analysis") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getDspSettings() : Promise<Result<DspSettings, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_dsp_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateDspSettings(newSettings: DspSettings) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_dsp_settings", { newSettings }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -111,6 +127,7 @@ export type BladePowerConfig = { sensitivity: number }
 export type BladePowerLegacyConfig = { mirror: boolean; blur: number; decay: number; multiplier: number; background_color: string; frequency_range: string; gradient: string; flip: boolean }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean
+export type DspSettings = { smoothing_factor: number; agc_attack: number; agc_decay: number }
 export type EffectConfig = { mode: "legacy"; config: BladePowerLegacyConfig } | { mode: "blade"; config: BladePowerConfig }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
 export type LedsInfo = { count: number }

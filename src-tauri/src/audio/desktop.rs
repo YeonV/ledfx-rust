@@ -1,4 +1,4 @@
-use super::{AudioAnalysisData, AudioCommand, AudioDevice};
+use super::{AudioAnalysisData, AudioCommand, AudioDevice, DspSettings};
 use crate::utils::dsp::generate_mel_filterbank;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream, SupportedStreamConfig};
@@ -51,6 +51,7 @@ pub fn set_desktop_device(
 pub fn run_desktop_capture(
     command_rx: mpsc::Receiver<AudioCommand>,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
+    dsp_settings: Arc<Mutex<DspSettings>>,
 ) {
     let host = cpal::default_host();
     let mut current_stream: Option<Stream> = None;
@@ -75,7 +76,8 @@ pub fn run_desktop_capture(
                             .expect("no default input config")
                     };
                     let audio_data_clone = audio_data.clone();
-                    let stream = build_and_play_stream(device, config, audio_data_clone);
+                    let dsp_settings_clone = dsp_settings.clone();
+                    let stream = build_and_play_stream(device, config, audio_data_clone, dsp_settings_clone);
                     current_stream = Some(stream);
                 }
             }
@@ -114,6 +116,7 @@ fn build_and_play_stream(
     device: Device,
     config: SupportedStreamConfig,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
+    dsp_settings: Arc<Mutex<DspSettings>>,
 ) -> Stream {
     let sample_rate = config.sample_rate().0;
     let channels = config.channels();
@@ -131,17 +134,12 @@ fn build_and_play_stream(
     let mel_filterbank =
         generate_mel_filterbank(FFT_SIZE / 2, sample_rate, NUM_BANDS, MIN_FREQ, MAX_FREQ);
 
-    // --- START: NORMALIZATION STATE ---
-    // These values control how the signal is smoothed and scaled.
-    const SMOOTHING_FACTOR: f32 = 0.4; // Higher is smoother but less responsive
-    const AGC_ATTACK: f32 = 0.01;     // How fast the peak adapts upwards
-    const AGC_DECAY: f32 = 0.8;    // How fast the peak adapts downwards
-
     let mut smoothed_melbanks = vec![0.0; NUM_BANDS];
-    let mut peak_energy = 1.0; // Start at 1.0 to avoid division by zero
-    // --- END: NORMALIZATION STATE ---
+    let mut peak_energy = 1.0;
 
     let data_callback = move |data: &[f32], _: &cpal::InputCallbackInfo| {
+        let settings = dsp_settings.lock().unwrap();
+
         for frame in data.chunks(channels as usize) {
             audio_samples.push(frame.iter().sum::<f32>() / channels as f32);
         }
@@ -155,7 +153,7 @@ fn build_and_play_stream(
 
             let magnitudes: Vec<f32> = fft_buffer[0..FFT_SIZE / 2]
                 .iter()
-                .map(|c| c.norm_sqr().sqrt()) // Use sqrt for amplitude, not power
+                .map(|c| c.norm_sqr().sqrt())
                 .collect();
 
             let raw_melbanks: Vec<f32> = mel_filterbank
@@ -168,30 +166,24 @@ fn build_and_play_stream(
                 })
                 .collect();
             
-            // --- START: NORMALIZATION PIPELINE ---
             let mut current_max_energy = 0.0f32;
             for i in 0..NUM_BANDS {
-                // 1. Apply exponential smoothing (IIR filter)
-                smoothed_melbanks[i] = (smoothed_melbanks[i] * SMOOTHING_FACTOR)
-                    + (raw_melbanks[i] * (1.0 - SMOOTHING_FACTOR));
-                
+                smoothed_melbanks[i] = (smoothed_melbanks[i] * settings.smoothing_factor)
+                    + (raw_melbanks[i] * (1.0 - settings.smoothing_factor));
                 current_max_energy = current_max_energy.max(smoothed_melbanks[i]);
             }
 
-            // 2. Update the running peak (our simple AGC)
             if current_max_energy > peak_energy {
-                peak_energy = peak_energy * (1.0 - AGC_ATTACK) + current_max_energy * AGC_ATTACK;
+                peak_energy = peak_energy * (1.0 - settings.agc_attack) + current_max_energy * settings.agc_attack;
             } else {
-                peak_energy = peak_energy * (1.0 - AGC_DECAY) + current_max_energy * AGC_DECAY;
+                peak_energy = peak_energy * (1.0 - settings.agc_decay) + current_max_energy * settings.agc_decay;
             }
-            peak_energy = peak_energy.max(1e-4); // Prevent peak from collapsing to zero
+            peak_energy = peak_energy.max(1e-4);
 
-            // 3. Normalize the smoothed melbanks by the running peak
             let final_melbanks: Vec<f32> = smoothed_melbanks
                 .iter()
-                .map(|&val| (val / peak_energy).min(1.0)) // Divide and clamp to 1.0
+                .map(|&val| (val / peak_energy).min(1.0))
                 .collect();
-            // --- END: NORMALIZATION PIPELINE ---
 
             if let Ok(mut data) = audio_data.lock() {
                 data.melbanks = final_melbanks;

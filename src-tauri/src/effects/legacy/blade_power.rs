@@ -1,9 +1,9 @@
-use crate::audio::AudioAnalysisData;
 use crate::effects::Effect;
 use crate::utils::colors::parse_gradient;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
+use crate::audio::{highs_power, lows_power, mids_power, AudioAnalysisData};
 
 #[derive(Serialize, Type, Clone)]
 #[serde(untagged)]
@@ -195,11 +195,13 @@ impl Effect for BladePowerLegacy {
             self.rebuild_palette(pixel_count);
         }
 
+        // --- THIS IS THE FIX ---
         let power = match self.config.frequency_range.as_str() {
-            "Mids" => audio_data.mids_power(),
-            "High" => audio_data.highs_power(),
-            _ => audio_data.lows_power(),
+            "Mids" => mids_power(&audio_data.melbanks),
+            "High" => highs_power(&audio_data.melbanks),
+            _ => lows_power(&audio_data.melbanks),
         };
+
         
         let bar_level = (power * self.config.multiplier * 2.0).min(1.0);
 
@@ -244,9 +246,7 @@ impl Effect for BladePowerLegacy {
     fn update_config(&mut self, config: Value) {
         if let Ok(new_config) = serde_json::from_value(config) {
             self.config = new_config;
-            // The palette and v_channel will be lazily rebuilt on the next render call,
-            // which is more efficient.
-            self.gradient_palette.clear()
+            self.gradient_palette.clear();
         } else {
             eprintln!("Failed to deserialize settings for BladePowerLegacy");
         }
