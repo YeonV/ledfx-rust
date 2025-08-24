@@ -10,7 +10,7 @@ import type { WledDevice } from "../bindings";
 
 export function WledDiscoverer() {
   const {
-    devices, setDevices,
+    setDevices,
     isScanning, setIsScanning,
     error, setError,
     duration,
@@ -37,10 +37,12 @@ export function WledDiscoverer() {
 
     const unlistenPromise = listen<WledDevice>("wled-device-found", (event) => {
       const foundDevice = event.payload;
-      if (!devices.some((d) => d.ip_address === foundDevice.ip_address)) {
-        setDevices([...devices, foundDevice]);
+      const currentDevices = useStore.getState().devices;
+      if (!currentDevices.some((d) => d.ip_address === foundDevice.ip_address)) {
+        setDevices([...currentDevices, foundDevice]);
       }
     });
+
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
     };

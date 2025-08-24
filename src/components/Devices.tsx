@@ -20,6 +20,7 @@ export function Devices() {
     effectSettings, setEffectSettings,
   } = useStore();
 
+  console.log(devices)
   const handleEffectSelection = useCallback(
     async (device: WledDevice, newEffectId: string) => {
       setSelectedEffects({

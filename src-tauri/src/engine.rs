@@ -167,50 +167,72 @@ pub fn run_effect_engine(
             let mut frame = vec![0u8; (active_effect.led_count * 3) as usize];
             let pixel_count = frame.len() / 3;
             
-            active_effect.effect.render(&latest_audio_data, &mut frame);
+            // --- START: THE FINAL, CORRECT PIPELINE ---
+
+            // 1. Render the pure effect into a temporary buffer.
+            let mut pure_render = vec![0u8; pixel_count * 3];
+            active_effect.effect.render(&latest_audio_data, &mut pure_render);
             
             let base_config = active_effect.effect.get_base_config();
             
+            // 2. Deconstruct into float buffers for processing.
             for i in 0..pixel_count {
-                active_effect.r_channel[i] = frame[i * 3] as f32;
-                active_effect.g_channel[i] = frame[i * 3 + 1] as f32;
-                active_effect.b_channel[i] = frame[i * 3 + 2] as f32;
+                active_effect.r_channel[i] = pure_render[i * 3] as f32;
+                active_effect.g_channel[i] = pure_render[i * 3 + 1] as f32;
+                active_effect.b_channel[i] = pure_render[i * 3 + 2] as f32;
             }
 
+            // 3. Apply Blur.
             if base_config.blur > 0.0 {
                 dsp::gaussian_blur_1d(&mut active_effect.r_channel, base_config.blur);
                 dsp::gaussian_blur_1d(&mut active_effect.g_channel, base_config.blur);
                 dsp::gaussian_blur_1d(&mut active_effect.b_channel, base_config.blur);
             }
             
-            // This is the flip-respecting mirror logic
+            // 4. Handle Mirror and Flip combinations.
             if base_config.mirror {
-                let half_len = (pixel_count as f32 / 2.0).ceil() as usize;
-                // We now read from a temporary clone of the (potentially flipped) channels
+                let half_len = pixel_count / 2;
                 let r_clone = active_effect.r_channel.clone();
                 let g_clone = active_effect.g_channel.clone();
                 let b_clone = active_effect.b_channel.clone();
 
-                for i in 0..half_len {
-                    let mirror_i = pixel_count - 1 - i;
-                    active_effect.r_channel[i] = r_clone[mirror_i];
-                    active_effect.g_channel[i] = g_clone[mirror_i];
-                    active_effect.b_channel[i] = b_clone[mirror_i];
+                if base_config.flip { // Center-out
+                    let first_half_r = &r_clone[0..half_len];
+                    let first_half_g = &g_clone[0..half_len];
+                    let first_half_b = &b_clone[0..half_len];
+
+                    // Left side of strip gets first half of bar, reversed
+                    active_effect.r_channel[0..half_len].copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
+                    active_effect.g_channel[0..half_len].copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
+                    active_effect.b_channel[0..half_len].copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
+
+                    // Right side of strip gets first half of bar
+                    active_effect.r_channel[pixel_count - half_len..].copy_from_slice(first_half_r);
+                    active_effect.g_channel[pixel_count - half_len..].copy_from_slice(first_half_g);
+                    active_effect.b_channel[pixel_count - half_len..].copy_from_slice(first_half_b);
+                    
+                } else { // Outside-in
+                    for i in 0..half_len {
+                        let mirror_i = pixel_count - 1 - i;
+                        active_effect.r_channel[mirror_i] = r_clone[i];
+                        active_effect.g_channel[mirror_i] = g_clone[i];
+                        active_effect.b_channel[mirror_i] = b_clone[i];
+                    }
                 }
-            }
-            
-            if base_config.flip {
+            } else if base_config.flip { // Standard flip
                 active_effect.r_channel.reverse();
                 active_effect.g_channel.reverse();
                 active_effect.b_channel.reverse();
             }
             
+            // 5. Composite the final frame.
             let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0,0,0]);
             for i in 0..pixel_count {
                 frame[i * 3]     = (active_effect.r_channel[i] as u8).saturating_add(bg_color[0]);
                 frame[i * 3 + 1] = (active_effect.g_channel[i] as u8).saturating_add(bg_color[1]);
                 frame[i * 3 + 2] = (active_effect.b_channel[i] as u8).saturating_add(bg_color[2]);
             }
+            // --- END: THE FINAL, CORRECT PIPELINE ---
 
             let destination = format!("{}:4048", ip);
             let _ = ddp::send_ddp_packet(&socket, &destination, 0, &frame, frame_count);
