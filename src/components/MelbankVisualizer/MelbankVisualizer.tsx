@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { commands } from '../bindings';
+import { commands } from '../../bindings';
 const MelbankVisualizer = () => {
     const [melbanks, setMelbanks] = useState<number[]>([]);
     const canvasRef = useRef<HTMLCanvasElement>(null);

@@ -1,12 +1,6 @@
-// src/components/EffectSettings.tsx
-
-import {
-  Box, Slider, Switch, TextField, Typography, FormControlLabel,
-  FormControl, InputLabel, Select, MenuItem
-} from '@mui/material';
-import type { EffectSetting } from '../bindings';
-import ReactGPicker from 'react-gcolor-picker';
-import GradientPicker from './GradientPicker/GradientPicker';
+import type { EffectSetting } from '../../bindings';
+import { Box, Slider, Switch, Typography, FormControlLabel, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import GradientPicker from '../GradientPicker/GradientPicker';
 
 interface EffectSettingsProps {
   schema: EffectSetting[];
@@ -21,10 +15,8 @@ export function EffectSettings({ schema, settings, onSettingChange }: EffectSett
   return (
     <Box>
       {schema.map((setting, index) => {
-        // --- THE FIX: Use the defaultValue directly. It is already the primitive value. ---
         const value = settings[setting.id] ?? setting.defaultValue;
 
-        // The `type` property is now guaranteed to be on the object.
         switch (setting.control.type) {
           case 'slider':
             const { min, max, step } = setting.control;
@@ -78,7 +70,7 @@ export function EffectSettings({ schema, settings, onSettingChange }: EffectSett
                 <InputLabel>{setting.name}</InputLabel>
                 <Select
                   label={setting.name}
-                  value={String(value)} // Ensure value is a string
+                  value={String(value)}
                   onChange={(e) => onSettingChange(setting.id, e.target.value)}
                 >
                   {options.map(opt => (

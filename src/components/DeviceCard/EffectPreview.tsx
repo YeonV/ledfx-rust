@@ -2,14 +2,17 @@
 
 import { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
-import { useFrameStore } from '../store/frameStore';
-import { commands } from '../bindings';
+import { useFrameStore } from '../../store/frameStore';
+import { commands } from '../../bindings';
 
 interface EffectPreviewProps {
   ipAddress: string;
   active: boolean;
 }
 
+/**
+ * Effect preview component for displaying the current effect in a PixelGraph.
+ */
 export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

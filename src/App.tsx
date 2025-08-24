@@ -4,8 +4,10 @@ import { useEffect } from "react";
 import { WledDiscoverer } from "./components/WledDiscoverer";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
+import { SettingsFab } from "./components/Settings/SettingsFab";
+import { Devices } from "./components/Devices";
+import { MelbankVisualizerFab } from "./components/MelbankVisualizer/MelbankVisualizerFab";
 import "./App.css";
-import MelbankVisualizer from "./components/MelbankVisualizer";
 
 function App() {
   useEffect(() => {
@@ -21,7 +23,9 @@ function App() {
   return (
     <main>
       <WledDiscoverer />
-      <MelbankVisualizer />
+      <MelbankVisualizerFab />
+      <SettingsFab />
+      <Devices />
     </main>
   );
 }
