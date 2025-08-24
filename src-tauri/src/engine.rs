@@ -1,6 +1,6 @@
 use crate::audio::SharedAudioData;
 use crate::effects::{blade, legacy, simple, Effect};
-use crate::utils::ddp::send_ddp_packet;
+use crate::utils::{colors, ddp, dsp};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::{HashMap, HashSet};
@@ -13,6 +13,9 @@ use tauri::{AppHandle, Emitter, State};
 struct ActiveEffect {
     effect: Box<dyn Effect>,
     led_count: u32,
+    r_channel: Vec<f32>,
+    g_channel: Vec<f32>,
+    b_channel: Vec<f32>,
 }
 
 #[tauri::command]
@@ -82,10 +85,10 @@ pub fn run_effect_engine(
                     effect_id,
                     config,
                 } => {
-                    if active_effects.remove(&ip_address).is_some() {
-                        let black_data = vec![0; (led_count * 3) as usize];
+                    if let Some(removed) = active_effects.remove(&ip_address) {
+                        let black_data = vec![0; (removed.led_count * 3) as usize];
                         let destination = format!("{}:4048", ip_address);
-                        let _ = send_ddp_packet(&socket, &destination, 0, &black_data, 0);
+                        let _ = ddp::send_ddp_packet(&socket, &destination, 0, &black_data, 0);
                     }
 
                     let effect: Option<Box<dyn Effect>> = if let Some(config_data) = config {
@@ -109,7 +112,14 @@ pub fn run_effect_engine(
                     };
 
                     if let Some(effect) = effect {
-                        active_effects.insert(ip_address, ActiveEffect { led_count, effect });
+                        let pixel_count = led_count as usize;
+                        active_effects.insert(ip_address, ActiveEffect {
+                            led_count,
+                            effect,
+                            r_channel: vec![0.0; pixel_count],
+                            g_channel: vec![0.0; pixel_count],
+                            b_channel: vec![0.0; pixel_count],
+                        });
                     } else {
                         eprintln!("Failed to create effect with id '{}'", effect_id);
                     }
@@ -118,7 +128,7 @@ pub fn run_effect_engine(
                     if let Some(removed) = active_effects.remove(&ip_address) {
                         let black_data = vec![0; (removed.led_count * 3) as usize];
                         let destination = format!("{}:4048", ip_address);
-                        let _ = send_ddp_packet(&socket, &destination, 0, &black_data, 0);
+                        let _ = ddp::send_ddp_packet(&socket, &destination, 0, &black_data, 0);
                         latest_frames.remove(&ip_address);
                     }
                 }
@@ -155,10 +165,55 @@ pub fn run_effect_engine(
 
         for (ip, active_effect) in &mut active_effects {
             let mut frame = vec![0u8; (active_effect.led_count * 3) as usize];
+            let pixel_count = frame.len() / 3;
+            
             active_effect.effect.render(&latest_audio_data, &mut frame);
+            
+            let base_config = active_effect.effect.get_base_config();
+            
+            for i in 0..pixel_count {
+                active_effect.r_channel[i] = frame[i * 3] as f32;
+                active_effect.g_channel[i] = frame[i * 3 + 1] as f32;
+                active_effect.b_channel[i] = frame[i * 3 + 2] as f32;
+            }
+
+            if base_config.blur > 0.0 {
+                dsp::gaussian_blur_1d(&mut active_effect.r_channel, base_config.blur);
+                dsp::gaussian_blur_1d(&mut active_effect.g_channel, base_config.blur);
+                dsp::gaussian_blur_1d(&mut active_effect.b_channel, base_config.blur);
+            }
+            
+            // This is the flip-respecting mirror logic
+            if base_config.mirror {
+                let half_len = (pixel_count as f32 / 2.0).ceil() as usize;
+                // We now read from a temporary clone of the (potentially flipped) channels
+                let r_clone = active_effect.r_channel.clone();
+                let g_clone = active_effect.g_channel.clone();
+                let b_clone = active_effect.b_channel.clone();
+
+                for i in 0..half_len {
+                    let mirror_i = pixel_count - 1 - i;
+                    active_effect.r_channel[i] = r_clone[mirror_i];
+                    active_effect.g_channel[i] = g_clone[mirror_i];
+                    active_effect.b_channel[i] = b_clone[mirror_i];
+                }
+            }
+            
+            if base_config.flip {
+                active_effect.r_channel.reverse();
+                active_effect.g_channel.reverse();
+                active_effect.b_channel.reverse();
+            }
+            
+            let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0,0,0]);
+            for i in 0..pixel_count {
+                frame[i * 3]     = (active_effect.r_channel[i] as u8).saturating_add(bg_color[0]);
+                frame[i * 3 + 1] = (active_effect.g_channel[i] as u8).saturating_add(bg_color[1]);
+                frame[i * 3 + 2] = (active_effect.b_channel[i] as u8).saturating_add(bg_color[2]);
+            }
 
             let destination = format!("{}:4048", ip);
-            let _ = send_ddp_packet(&socket, &destination, 0, &frame, frame_count);
+            let _ = ddp::send_ddp_packet(&socket, &destination, 0, &frame, frame_count);
             latest_frames.insert(ip.clone(), frame);
         }
 
@@ -179,8 +234,7 @@ pub fn run_effect_engine(
     }
 }
 
-// --- TAURI COMMANDS ---
-
+// All Tauri commands are unchanged
 #[tauri::command]
 #[specta::specta]
 pub fn start_effect(

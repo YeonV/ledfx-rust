@@ -1,7 +1,17 @@
 use crate::audio::AudioAnalysisData;
-use crate::effects::Effect;
+use crate::effects::{BaseEffectConfig, Effect};
 use crate::utils::colors::hsv_to_rgb;
 use serde_json::Value;
+
+// This is a default base config for effects that don't need customization.
+fn default_base_config() -> BaseEffectConfig {
+    BaseEffectConfig {
+        mirror: false,
+        flip: false,
+        blur: 0.0,
+        background_color: "#000000".to_string(),
+    }
+}
 
 pub struct RainbowEffect {
     pub hue: f32,
@@ -19,6 +29,10 @@ impl Effect for RainbowEffect {
     }
 
     fn update_config(&mut self, _config: Value) {}
+
+    fn get_base_config(&self) -> BaseEffectConfig {
+        default_base_config()
+    }
 }
 
 pub struct ScanEffect {
@@ -32,7 +46,7 @@ impl Effect for ScanEffect {
         if pixel_count == 0 { return; }
         
         self.position = (self.position + 1) % pixel_count;
-        frame.fill(0); // Clear the frame
+        frame.fill(0);
         
         let start_index = (self.position * 3) as usize;
         if start_index + 2 < frame.len() {
@@ -43,6 +57,10 @@ impl Effect for ScanEffect {
     }
 
     fn update_config(&mut self, _config: Value) {}
+
+    fn get_base_config(&self) -> BaseEffectConfig {
+        default_base_config()
+    }
 }
 
 pub struct ScrollEffect {
@@ -65,4 +83,8 @@ impl Effect for ScrollEffect {
     }
 
     fn update_config(&mut self, _config: Value) {}
+
+    fn get_base_config(&self) -> BaseEffectConfig {
+        default_base_config()
+    }
 }

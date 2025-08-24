@@ -1,6 +1,5 @@
-use crate::effects::Effect;
-use crate::utils::colors::{self, parse_gradient};
-use crate::utils::{dsp};
+use crate::effects::{BaseEffectConfig, Effect};
+use crate::utils::colors::{self};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
@@ -33,17 +32,15 @@ pub struct EffectSetting {
     pub default_value: DefaultValue,
 }
 
-#[derive(Deserialize, Serialize, Type, Clone)]
+#[derive(Deserialize, Serialize, Type, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct BladePowerLegacyConfig {
-    pub mirror: bool,
-    pub blur: f32,
     pub decay: f32,
     pub multiplier: f32,
-    pub background_color: String,
     pub frequency_range: String,
     pub gradient: String,
-    pub flip: bool,
+    #[serde(flatten)]
+    pub base: BaseEffectConfig,
 }
 
 pub fn get_schema() -> Vec<EffectSetting> {
@@ -131,23 +128,14 @@ pub struct BladePowerLegacy {
     pub config: BladePowerLegacyConfig,
     gradient_palette: Vec<[u8; 3]>,
     v_channel: Vec<f32>,
-    background_color_rgb: [u8; 3],
-    r_channel: Vec<f32>,
-    g_channel: Vec<f32>,
-    b_channel: Vec<f32>,
 }
 
 impl BladePowerLegacy {
     pub fn new(config: BladePowerLegacyConfig) -> Self {
-        let background_color_rgb = colors::parse_single_color(&config.background_color).unwrap_or([0, 0, 0]);
         Self {
             config,
             gradient_palette: Vec::new(),
             v_channel: Vec::new(),
-            background_color_rgb,
-            r_channel: Vec::new(),
-            g_channel: Vec::new(),
-            b_channel: Vec::new(),
         }
     }
 
@@ -155,17 +143,10 @@ impl BladePowerLegacy {
         if pixel_count == 0 { return; }
         if self.v_channel.len() != pixel_count {
             self.v_channel = vec![0.0; pixel_count];
-            self.r_channel = vec![0.0; pixel_count];
-            self.g_channel = vec![0.0; pixel_count];
-            self.b_channel = vec![0.0; pixel_count];
         }
-
-        // This function now ONLY creates a simple, linear gradient.
-        // All flip and mirror logic has been removed.
         self.gradient_palette = colors::parse_gradient(&self.config.gradient, pixel_count);
     }
 }
-
 
 impl Effect for BladePowerLegacy {
     fn render(&mut self, audio_data: &AudioAnalysisData, frame: &mut [u8]) {
@@ -182,78 +163,42 @@ impl Effect for BladePowerLegacy {
             _ => lows_power(&audio_data.melbanks),
         };
         
-        // --- START: NEW RENDER PIPELINE ---
-
-        // 1. Calculate the bar size. Note: mirror no longer affects this.
         let bar_level = (power * self.config.multiplier * 2.0).min(1.0);
         let bar_idx = (bar_level * pixel_count as f32) as usize;
 
-        // 2. Apply V-Channel decay. (Unchanged)
         let decay_factor = self.config.decay / 2.0 + 0.45;
         for v in self.v_channel.iter_mut() {
             *v *= decay_factor;
         }
 
-        // 3. Set brightness for the active pixels. Note: mirror no longer affects this.
         for i in 0..bar_idx {
             self.v_channel[i] = 1.0;
         }
 
-        // 4. Render the effect into our float channel buffers. (Unchanged)
         for i in 0..pixel_count {
             let base_color = self.gradient_palette[i];
             let brightness = self.v_channel[i];
 
-            self.r_channel[i] = base_color[0] as f32 * brightness;
-            self.g_channel[i] = base_color[1] as f32 * brightness;
-            self.b_channel[i] = base_color[2] as f32 * brightness;
-        }
-        
-        // 5. Apply Gaussian blur to each channel if configured. (Unchanged)
-        if self.config.blur > 0.0 {
-            dsp::gaussian_blur_1d(&mut self.r_channel, self.config.blur);
-            dsp::gaussian_blur_1d(&mut self.g_channel, self.config.blur);
-            dsp::gaussian_blur_1d(&mut self.b_channel, self.config.blur);
-        }
+            let r = (base_color[0] as f32 * brightness) as u8;
+            let g = (base_color[1] as f32 * brightness) as u8;
+            let b = (base_color[2] as f32 * brightness) as u8;
 
-        // 6. POST-PROCESSING: Apply Mirror
-        if self.config.mirror {
-            let half_len = (pixel_count as f32 / 2.0).ceil() as usize;
-            for i in 0..half_len {
-                let mirror_i = pixel_count - 1 - i;
-                self.r_channel[mirror_i] = self.r_channel[i];
-                self.g_channel[mirror_i] = self.g_channel[i];
-                self.b_channel[mirror_i] = self.b_channel[i];
-            }
+            frame[i * 3]     = r;
+            frame[i * 3 + 1] = g;
+            frame[i * 3 + 2] = b;
         }
-        
-        // 7. POST-PROCESSING: Apply Flip
-        if self.config.flip {
-            self.r_channel.reverse();
-            self.g_channel.reverse();
-            self.b_channel.reverse();
-        }
-
-        // 8. Composite the final frame with background color.
-        for i in 0..pixel_count {
-            let r = self.r_channel[i] as u8;
-            let g = self.g_channel[i] as u8;
-            let b = self.b_channel[i] as u8;
-
-            frame[i * 3]     = r.saturating_add(self.background_color_rgb[0]);
-            frame[i * 3 + 1] = g.saturating_add(self.background_color_rgb[1]);
-            frame[i * 3 + 2] = b.saturating_add(self.background_color_rgb[2]);
-        }
-        // --- END: NEW RENDER PIPELINE ---
     }
 
     fn update_config(&mut self, config: Value) {
         if let Ok(new_config) = serde_json::from_value(config) {
             self.config = new_config;
-            self.background_color_rgb = colors::parse_single_color(&self.config.background_color).unwrap_or([0, 0, 0]);
             self.gradient_palette.clear();
         } else {
             eprintln!("Failed to deserialize settings for BladePowerLegacy");
         }
+    }
+    
+    fn get_base_config(&self) -> BaseEffectConfig {
+        self.config.base.clone()
     }
 }

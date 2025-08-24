@@ -123,8 +123,8 @@ async updateDspSettings(newSettings: DspSettings) : Promise<Result<null, string>
 
 export type AudioAnalysisData = { melbanks: number[] }
 export type AudioDevice = { name: string }
-export type BladePowerConfig = { sensitivity: number }
-export type BladePowerLegacyConfig = { mirror: boolean; blur: number; decay: number; multiplier: number; background_color: string; frequency_range: string; gradient: string; flip: boolean }
+export type BladePowerConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { sensitivity: number }
+export type BladePowerLegacyConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { decay: number; multiplier: number; frequency_range: string; gradient: string }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean
 export type DspSettings = { smoothing_factor: number; agc_attack: number; agc_decay: number }
