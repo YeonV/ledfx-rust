@@ -1,3 +1,4 @@
+// src/components/DeviceCard/EffectPicker.tsx
 import { memo } from 'react';
 import { WledDevice } from '../../bindings';
 import { MenuItem, Select } from '@mui/material';

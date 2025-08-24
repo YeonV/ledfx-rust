@@ -1,20 +1,66 @@
 use crate::audio::AudioAnalysisData;
-use crate::effects::{BaseEffectConfig, Effect};
+use crate::effects::{BaseEffectConfig, Effect, legacy::blade_power::{EffectSetting, Control, DefaultValue}};
 use crate::utils::colors::hsv_to_rgb;
 use serde_json::Value;
 
-// This is a default base config for effects that don't need customization.
-fn default_base_config() -> BaseEffectConfig {
-    BaseEffectConfig {
-        mirror: false,
-        flip: false,
-        blur: 0.0,
-        background_color: "#000000".to_string(),
-    }
+// --- START: NEW SHARED SCHEMA FOR SIMPLE EFFECTS ---
+// Since simple effects only have base settings, we can share this schema.
+pub fn get_simple_schema() -> Vec<EffectSetting> {
+    vec![
+        EffectSetting {
+            id: "mirror".to_string(),
+            name: "Mirror".to_string(),
+            description: "Mirror the effect".to_string(),
+            control: Control::Checkbox,
+            default_value: DefaultValue::Bool(false),
+        },
+        EffectSetting {
+            id: "blur".to_string(),
+            name: "Blur".to_string(),
+            description: "Amount to blur the effect".to_string(),
+            control: Control::Slider {
+                min: 0.0,
+                max: 10.0,
+                step: 0.1,
+            },
+            default_value: DefaultValue::Number(0.0),
+        },
+        EffectSetting {
+            id: "background_color".to_string(),
+            name: "Background Color".to_string(),
+            description: "Color of Background".to_string(),
+            control: Control::ColorPicker,
+            default_value: DefaultValue::String("#000000".to_string()),
+        },
+        EffectSetting {
+            id: "flip".to_string(),
+            name: "Flip".to_string(),
+            description: "Flip the effect direction".to_string(),
+            control: Control::Checkbox,
+            default_value: DefaultValue::Bool(false),
+        },
+    ]
 }
+// --- END: NEW SHARED SCHEMA ---
+
 
 pub struct RainbowEffect {
     pub hue: f32,
+    config: BaseEffectConfig,
+}
+
+impl RainbowEffect {
+    pub fn new() -> Self {
+        Self {
+            hue: 0.0,
+            config: BaseEffectConfig {
+                mirror: false,
+                flip: false,
+                blur: 0.0,
+                background_color: "#000000".to_string(),
+            }
+        }
+    }
 }
 
 impl Effect for RainbowEffect {
@@ -28,16 +74,36 @@ impl Effect for RainbowEffect {
         }
     }
 
-    fn update_config(&mut self, _config: Value) {}
+    fn update_config(&mut self, config: Value) {
+        if let Ok(new_config) = serde_json::from_value(config) {
+            self.config = new_config;
+        }
+    }
 
     fn get_base_config(&self) -> BaseEffectConfig {
-        default_base_config()
+        self.config.clone()
     }
 }
 
 pub struct ScanEffect {
     pub position: u32,
     pub color: [u8; 3],
+    config: BaseEffectConfig,
+}
+
+impl ScanEffect {
+    pub fn new() -> Self {
+        Self {
+            position: 0,
+            color: [255, 0, 0],
+            config: BaseEffectConfig {
+                mirror: false,
+                flip: false,
+                blur: 0.0,
+                background_color: "#000000".to_string(),
+            }
+        }
+    }
 }
 
 impl Effect for ScanEffect {
@@ -56,15 +122,34 @@ impl Effect for ScanEffect {
         }
     }
 
-    fn update_config(&mut self, _config: Value) {}
+    fn update_config(&mut self, config: Value) {
+        if let Ok(new_config) = serde_json::from_value(config) {
+            self.config = new_config;
+        }
+    }
 
     fn get_base_config(&self) -> BaseEffectConfig {
-        default_base_config()
+        self.config.clone()
     }
 }
 
 pub struct ScrollEffect {
     pub hue: f32,
+    config: BaseEffectConfig,
+}
+
+impl ScrollEffect {
+    pub fn new() -> Self {
+        Self {
+            hue: 0.0,
+            config: BaseEffectConfig {
+                mirror: false,
+                flip: false,
+                blur: 0.0,
+                background_color: "#000000".to_string(),
+            }
+        }
+    }
 }
 
 impl Effect for ScrollEffect {
@@ -82,9 +167,13 @@ impl Effect for ScrollEffect {
         }
     }
 
-    fn update_config(&mut self, _config: Value) {}
+    fn update_config(&mut self, config: Value) {
+        if let Ok(new_config) = serde_json::from_value(config) {
+            self.config = new_config;
+        }
+    }
 
     fn get_base_config(&self) -> BaseEffectConfig {
-        default_base_config()
+        self.config.clone()
     }
 }

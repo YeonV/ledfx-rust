@@ -85,12 +85,6 @@ pub fn run_effect_engine(
                     effect_id,
                     config,
                 } => {
-                    if let Some(removed) = active_effects.remove(&ip_address) {
-                        let black_data = vec![0; (removed.led_count * 3) as usize];
-                        let destination = format!("{}:4048", ip_address);
-                        let _ = ddp::send_ddp_packet(&socket, &destination, 0, &black_data, 0);
-                    }
-
                     let effect: Option<Box<dyn Effect>> = if let Some(config_data) = config {
                         match config_data {
                             EffectConfig::Legacy(conf) => {
@@ -101,13 +95,11 @@ pub fn run_effect_engine(
                             )),
                         }
                     } else {
+                        // Use the new constructors for simple effects
                         match effect_id.as_str() {
-                            "scan" => Some(Box::new(simple::ScanEffect {
-                                position: 0,
-                                color: [255, 0, 0],
-                            })),
-                            "scroll" => Some(Box::new(simple::ScrollEffect { hue: 0.0 })),
-                            _ => Some(Box::new(simple::RainbowEffect { hue: 0.0 })),
+                            "scan" => Some(Box::new(simple::ScanEffect::new())),
+                            "scroll" => Some(Box::new(simple::ScrollEffect::new())),
+                            _ => Some(Box::new(simple::RainbowEffect::new())),
                         }
                     };
 

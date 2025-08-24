@@ -1,3 +1,4 @@
+// src/components/DeviceCard/DeviceCard.tsx
 import { memo } from 'react';
 import { InfoLine } from './Infoline';
 import { EffectPicker } from './EffectPicker';

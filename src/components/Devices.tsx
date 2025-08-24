@@ -1,4 +1,4 @@
-// src/components/WledDiscoverer.tsx
+// src/components/Devices.tsx
 
 import { useCallback } from "react";
 import { DeviceCard } from "./DeviceCard/DeviceCard";
@@ -125,6 +125,7 @@ export function Devices() {
     }
   }, []);
 
+  console.log(effectSettings, effectSchemas);
   return (
     <Grid container spacing={2}>
         {devices.map((device) => (
