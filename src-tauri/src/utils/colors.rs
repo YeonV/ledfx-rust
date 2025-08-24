@@ -18,8 +18,10 @@ pub fn parse_gradient(gradient_str: &str, size: usize) -> Vec<[u8; 3]> {
     generate_palette_from_stops(&stops, size)
 }
 
+// --- THIS IS THE FIX ---
 // Helper to parse a single color token (hex, short-hex, or rgb).
-fn parse_single_color(color_str: &str) -> Option<[u8; 3]> {
+pub fn parse_single_color(color_str: &str) -> Option<[u8; 3]> {
+// --- END FIX ---
     let s = color_str.trim();
     if s.starts_with('#') {
         let hex = s.strip_prefix('#').unwrap();
@@ -37,12 +39,16 @@ fn parse_single_color(color_str: &str) -> Option<[u8; 3]> {
             None
         }
     } else if s.starts_with("rgb") {
-        let inner = s.strip_prefix("rgb(")?.strip_suffix(")")?;
-        let mut parts = inner.split(',').map(|p| p.trim().parse::<u8>());
-        let r = parts.next()?.ok()?;
-        let g = parts.next()?.ok()?;
-        let b = parts.next()?.ok()?;
-        Some([r, g, b])
+        // Updated to handle trailing characters like ` 98%)`
+        let re = Regex::new(r"rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)").unwrap();
+        if let Some(caps) = re.captures(s) {
+            let r = caps.get(1)?.as_str().parse::<u8>().ok()?;
+            let g = caps.get(2)?.as_str().parse::<u8>().ok()?;
+            let b = caps.get(3)?.as_str().parse::<u8>().ok()?;
+            Some([r, g, b])
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -79,23 +85,20 @@ fn generate_palette_from_stops(stops: &[(f32, [u8; 3])], size: usize) -> Vec<[u8
     let mut palette = Vec::with_capacity(size);
 
     for i in 0..size {
-        let pos = i as f32 / (size - 1) as f32;
+        let pos = i as f32 / (size - 1).max(1) as f32; // Prevent division by zero for size=1
         
-        // Find the two stops the current position is between.
         let end_stop_idx = stops.iter().position(|s| s.0 >= pos).unwrap_or(stops.len() - 1);
         let start_stop_idx = if end_stop_idx > 0 { end_stop_idx - 1 } else { 0 };
 
         let start_stop = &stops[start_stop_idx];
         let end_stop = &stops[end_stop_idx];
 
-        // Calculate how far we are between the start and end stops.
         let t = if (end_stop.0 - start_stop.0).abs() < 1e-6 {
-            0.0 // Avoid division by zero if stops are at the same position
+            0.0
         } else {
             (pos - start_stop.0) / (end_stop.0 - start_stop.0)
         };
 
-        // Linear interpolation for each color channel.
         let r = start_stop.1[0] as f32 * (1.0 - t) + end_stop.1[0] as f32 * t;
         let g = start_stop.1[1] as f32 * (1.0 - t) + end_stop.1[1] as f32 * t;
         let b = start_stop.1[2] as f32 * (1.0 - t) + end_stop.1[2] as f32 * t;

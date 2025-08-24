@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { commands } from "../bindings";
 import { useStore } from "../store/useStore";
 import { Wled } from "./Icons/Icons";
-import { Box, LinearProgress, Button, Stack, Alert, Drawer, IconButton } from "@mui/material";
+import { Box, LinearProgress, Button, Alert } from "@mui/material";
 import type { WledDevice } from "../bindings";
 
 export function WledDiscoverer() {
