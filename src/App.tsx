@@ -8,6 +8,7 @@ import { MelbankVisualizerFab } from "./components/MelbankVisualizer/MelbankVisu
 import "./App.css";
 import { commands, type Virtual } from "./bindings"; // Import Virtual type
 import { useStore } from "./store/useStore";
+import { AddButton } from "./components/AddButton";
 
 function App() {
   const { setAvailableEffects, setVirtuals } = useStore();
@@ -54,6 +55,7 @@ function App() {
       <MelbankVisualizerFab />
       <SettingsFab />
       <VirtualsComponent />
+      <AddButton />
     </main>
   );
 }
