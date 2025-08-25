@@ -1,9 +1,9 @@
 import { useCallback } from "react";
-import { VirtualCard } from "./VirtualCard/VirtualsCard";
+import { VirtualCard } from "./VirtualCard/VirtualCard";
 import { commands } from "../bindings";
 import { useStore } from "../store/useStore";
 import { Grid } from "@mui/material";
-import type { Virtual, EffectConfig, EffectSetting, EffectInfo, BladePowerConfig, ScanConfig } from "../bindings";
+import type { Virtual, EffectConfig, EffectSetting, EffectInfo } from "../bindings";
 
 const buildConfigPayload = (effectId: string, settings: Record<string, any>, availableEffects: EffectInfo[]): EffectConfig | null => {
     const effectInfo = availableEffects.find(e => e.id === effectId);

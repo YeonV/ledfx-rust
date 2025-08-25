@@ -1,9 +1,11 @@
 import { create } from 'zustand';
-import type { Virtual, AudioDevice, EffectSetting, EffectInfo } from '../bindings';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device } from '../bindings';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
 interface IStore {
+  devices: Device[];
+  setDevices: (devices: Device[]) => void;
   virtuals: Virtual[];
   setVirtuals: (virtuals: Virtual[]) => void;
   isScanning: boolean;
@@ -35,6 +37,8 @@ interface IStore {
 }
 
 export const useStore = create<IStore>((set) => ({
+  devices: [],
+  setDevices: (devices) => set({ devices }),
   virtuals: [],
   setVirtuals: (virtuals) => set({ virtuals }),
   isScanning: false,

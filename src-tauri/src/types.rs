@@ -19,8 +19,6 @@ pub struct Virtual {
     pub id: String,
     pub name: String,
     pub matrix_data: Vec<Vec<Option<MatrixCell>>>,
-    
-    // This is the new field to link a virtual to a device
     #[serde(default)]
-    pub is_device: Option<String>, // Contains the device_ip if it's a device-virtual
+    pub is_device: Option<String>,
 }

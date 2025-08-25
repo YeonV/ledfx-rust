@@ -30,6 +30,7 @@ fn configure_builder() -> Builder<tauri::Wry> {
             engine::set_target_fps,
             engine::get_effect_schema,
             engine::get_available_effects,
+            engine::get_devices,
             engine::get_virtuals,
             audio::get_audio_devices,
             audio::set_audio_device,
@@ -76,8 +77,6 @@ pub fn run() {
             .expect("Failed to export typescript bindings");
     }
 
-    // Create the REAL builder that will be used to build the application.
-    // This is now completely separate from the export logic and cannot fail.
     let builder = configure_builder();
     
     // --- END: THE FINAL, CORRECT BUILDER PATTERN ---

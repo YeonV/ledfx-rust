@@ -117,6 +117,14 @@ async getAvailableEffects() : Promise<Result<EffectInfo[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getDevices() : Promise<Result<Device[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_devices") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getVirtuals() : Promise<Result<Virtual[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_virtuals") };

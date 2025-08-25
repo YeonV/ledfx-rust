@@ -3,18 +3,17 @@ import { WledDiscoverer } from "./components/WledDiscoverer";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
 import { SettingsFab } from "./components/Settings/SettingsFab";
-import { Virtuals as VirtualsComponent } from "./components/Virtuals"; // Renamed to avoid conflict
+import { Virtuals as VirtualsComponent } from "./components/Virtuals";
 import { MelbankVisualizerFab } from "./components/MelbankVisualizer/MelbankVisualizerFab";
 import "./App.css";
-import { commands, type Virtual } from "./bindings"; // Import Virtual type
+import { commands, type Virtual, type Device } from "./bindings";
 import { useStore } from "./store/useStore";
 import { AddButton } from "./components/AddButton";
 
 function App() {
-  const { setAvailableEffects, setVirtuals } = useStore();
+  const { setAvailableEffects, setVirtuals, setDevices } = useStore();
 
   useEffect(() => {
-    // Fetch initial state once on startup
     const fetchInitialState = async () => {
       try {
         const effectsResult = await commands.getAvailableEffects();
@@ -22,32 +21,34 @@ function App() {
 
         const virtualsResult = await commands.getVirtuals();
         if (virtualsResult.status === 'ok') setVirtuals(virtualsResult.data);
+        
+        const devicesResult = await commands.getDevices();
+        if (devicesResult.status === 'ok') setDevices(devicesResult.data);
 
       } catch (e) { console.error("Failed to fetch initial state:", e); }
     };
     fetchInitialState();
 
-    // --- START: THE EVENT-DRIVEN FIX ---
-    // Listen for frame data
     const unlistenFrames = listen<Record<string, number[]>>('engine-tick', (event) => {
       useFrameStore.setState({ frames: event.payload });
     });
 
-    // Listen for changes to the list of virtuals
     const unlistenVirtuals = listen<Virtual[]>('virtuals-changed', (event) => {
-      console.log("[EVENT] Virtuals list updated from backend:", event.payload);
       setVirtuals(event.payload);
     });
-    // --- END: THE EVENT-DRIVEN FIX ---
+    
+    const unlistenDevices = listen<Device[]>('devices-changed', (event) => {
+      setDevices(event.payload);
+    });
 
     return () => {
-      // Cleanup both listeners on unmount
-      Promise.all([unlistenFrames, unlistenVirtuals]).then(([uf, uv]) => {
+      Promise.all([unlistenFrames, unlistenVirtuals, unlistenDevices]).then(([uf, uv, ud]) => {
         uf();
         uv();
+        ud();
       });
     };
-  }, [setAvailableEffects, setVirtuals]);
+  }, [setAvailableEffects, setVirtuals, setDevices]);
 
   return (
     <main>

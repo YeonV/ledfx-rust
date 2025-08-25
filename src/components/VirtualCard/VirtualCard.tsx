@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { InfoLine } from './Infoline';
 import { EffectPicker } from './EffectPicker';
 import { EffectPreview } from './EffectPreview';
@@ -6,6 +6,7 @@ import { EffectSettings } from './EffectSettings';
 import { Accordion, AccordionDetails, AccordionSummary, Card, CardContent, CardHeader, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import { ArrowDropDown, Lightbulb as LightbulbIcon, PlayArrow as PlayArrowIcon, Stop as StopIcon, Edit as EditIcon} from '@mui/icons-material';
 import { type EffectSetting, type Virtual } from '../../bindings';
+import { EditVirtualDialog } from '../EditVirtualDialog';
 
 interface VirtualCardProps {
   virtual: Virtual;
@@ -30,9 +31,11 @@ export const VirtualCard = memo(({
   onStop,
   onSettingChange,
 }: VirtualCardProps) => {
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const pixelCount = virtual.matrix_data?.flat()?.filter(Boolean)?.length || 0;
 
   return (
+    <>
     <Card variant="outlined" sx={{ height: 'auto', width: '350px', display: 'flex', flexDirection: 'column' }}>
       <CardHeader
         sx={{ p: "8px 8px"}}
@@ -51,7 +54,7 @@ export const VirtualCard = memo(({
         action={
           <>
             {!virtual.is_device && (
-              <IconButton size="small" onClick={() => { /* TODO: Open Matrix Studio */ }}>
+              <IconButton size="small" onClick={() => { setIsEditDialogOpen(true) }}>
                 <EditIcon />
               </IconButton>
             )}
@@ -76,5 +79,11 @@ export const VirtualCard = memo(({
         </Accordion>}
       </CardContent>
     </Card>
+    <EditVirtualDialog
+        open={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        virtualToEdit={virtual} // Pass the virtual to open in "Edit" mode
+      />
+      </>
   );
 });
