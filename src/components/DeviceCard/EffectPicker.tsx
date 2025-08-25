@@ -1,7 +1,7 @@
-// src/components/DeviceCard/EffectPicker.tsx
 import { memo } from 'react';
 import { WledDevice } from '../../bindings';
 import { MenuItem, Select } from '@mui/material';
+import { useStore } from '../../store/useStore';
 
 interface EffectPickerProps {
   device: WledDevice;
@@ -9,14 +9,13 @@ interface EffectPickerProps {
   onEffectSelect: (device: WledDevice, effectId: string) => void;
 }
 
-/**
- * Effect picker component for selecting an effect
- */
 export const EffectPicker = memo(({
   device,
   selectedEffect,
   onEffectSelect,
 }: EffectPickerProps) => {
+  const { availableEffects } = useStore();
+
   return (
     <Select
       sx={{ mt: 1.5 }}
@@ -26,10 +25,9 @@ export const EffectPicker = memo(({
       onChange={(e) => onEffectSelect(device, e.target.value)}
     >
       <MenuItem value="none" disabled>Choose Effect</MenuItem>
-      <MenuItem value="rainbow">Rainbow</MenuItem>
-      <MenuItem value="fade">Fade</MenuItem>
-      <MenuItem value="scan">Scan</MenuItem>
-      <MenuItem value="bladepower">BladePower</MenuItem>
+      {availableEffects.map(effect => (
+        <MenuItem key={effect.id} value={effect.id}>{effect.name}</MenuItem>
+      ))}
     </Select> 
   );
 });

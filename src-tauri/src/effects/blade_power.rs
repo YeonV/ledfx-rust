@@ -1,5 +1,5 @@
-use crate::effects::{BaseEffectConfig, Effect};
-use crate::utils::colors::{self};
+use crate::effects::{get_base_schema, BaseEffectConfig, Effect};
+use crate::utils::colors;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
@@ -34,7 +34,7 @@ pub struct EffectSetting {
 
 #[derive(Deserialize, Serialize, Type, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
-pub struct BladePowerLegacyConfig {
+pub struct BladePowerConfig {
     pub decay: f32,
     pub multiplier: f32,
     pub frequency_range: String,
@@ -44,53 +44,21 @@ pub struct BladePowerLegacyConfig {
 }
 
 pub fn get_schema() -> Vec<EffectSetting> {
-    vec![
-        EffectSetting {
-            id: "mirror".to_string(),
-            name: "Mirror".to_string(),
-            description: "Mirror the effect".to_string(),
-            control: Control::Checkbox,
-            default_value: DefaultValue::Bool(false),
-        },
-        EffectSetting {
-            id: "blur".to_string(),
-            name: "Blur".to_string(),
-            description: "Amount to blur the effect".to_string(),
-            control: Control::Slider {
-                min: 0.0,
-                max: 10.0,
-                step: 0.1,
-            },
-            default_value: DefaultValue::Number(2.0),
-        },
+    let mut schema = get_base_schema();
+    schema.extend(vec![
         EffectSetting {
             id: "decay".to_string(),
             name: "Decay".to_string(),
             description: "Rate of color decay".to_string(),
-            control: Control::Slider {
-                min: 0.0,
-                max: 1.0,
-                step: 0.01,
-            },
+            control: Control::Slider { min: 0.0, max: 1.0, step: 0.01 },
             default_value: DefaultValue::Number(0.7),
         },
         EffectSetting {
             id: "multiplier".to_string(),
             name: "Multiplier".to_string(),
             description: "Make the reactive bar bigger/smaller".to_string(),
-            control: Control::Slider {
-                min: 0.0,
-                max: 1.0,
-                step: 0.01,
-            },
+            control: Control::Slider { min: 0.0, max: 1.0, step: 0.01 },
             default_value: DefaultValue::Number(0.5),
-        },
-        EffectSetting {
-            id: "background_color".to_string(),
-            name: "Background Color".to_string(),
-            description: "Color of Background".to_string(),
-            control: Control::ColorPicker,
-            default_value: DefaultValue::String("#000000".to_string()),
         },
         EffectSetting {
             id: "frequency_range".to_string(),
@@ -114,24 +82,18 @@ pub fn get_schema() -> Vec<EffectSetting> {
                 "linear-gradient(90deg, #ff0000 0%, #0000ff 100%)".to_string(),
             ),
         },
-        EffectSetting {
-            id: "flip".to_string(),
-            name: "Flip".to_string(),
-            description: "Flip the effect direction".to_string(),
-            control: Control::Checkbox,
-            default_value: DefaultValue::Bool(false),
-        },
-    ]
+    ]);
+    schema
 }
 
-pub struct BladePowerLegacy {
-    pub config: BladePowerLegacyConfig,
+pub struct BladePower {
+    pub config: BladePowerConfig,
     gradient_palette: Vec<[u8; 3]>,
     v_channel: Vec<f32>,
 }
 
-impl BladePowerLegacy {
-    pub fn new(config: BladePowerLegacyConfig) -> Self {
+impl BladePower {
+    pub fn new(config: BladePowerConfig) -> Self {
         Self {
             config,
             gradient_palette: Vec::new(),
@@ -148,7 +110,7 @@ impl BladePowerLegacy {
     }
 }
 
-impl Effect for BladePowerLegacy {
+impl Effect for BladePower {
     fn render(&mut self, audio_data: &AudioAnalysisData, frame: &mut [u8]) {
         let pixel_count = frame.len() / 3;
         if pixel_count == 0 { return; }
@@ -194,7 +156,7 @@ impl Effect for BladePowerLegacy {
             self.config = new_config;
             self.gradient_palette.clear();
         } else {
-            eprintln!("Failed to deserialize settings for BladePowerLegacy");
+            eprintln!("Failed to deserialize settings for BladePower");
         }
     }
     

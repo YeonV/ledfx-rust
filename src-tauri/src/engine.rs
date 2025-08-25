@@ -1,8 +1,7 @@
 use crate::audio::SharedAudioData;
-use crate::effects::{legacy, simple, Effect};
+use crate::effects::{blade_power, scan, Effect};
 use crate::utils::{colors, ddp, dsp};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use specta::Type;
 use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
@@ -19,39 +18,54 @@ struct ActiveEffect {
     b_channel: Vec<f32>,
 }
 
-// --- START: THE CORRECT, UNIVERSAL SCHEMA COMMAND ---
+#[derive(Serialize, Type, Clone)]
+pub struct EffectInfo {
+    pub id: String,
+    pub name: String,
+    pub variant: String,
+}
+
+#[derive(Deserialize, Serialize, Type, Clone)]
+#[serde(tag = "type", content = "config")]
+pub enum EffectConfig {
+    BladePower(blade_power::BladePowerConfig),
+    Scan(scan::ScanConfig),
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_available_effects() -> Result<Vec<EffectInfo>, String> {
+    Ok(vec![
+        EffectInfo {
+            id: "bladepower".to_string(),
+            name: "Blade Power".to_string(),
+            variant: "BladePower".to_string(),
+        },
+        EffectInfo {
+            id: "scan".to_string(),
+            name: "Scan".to_string(),
+            variant: "Scan".to_string(),
+        },
+    ])
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn get_effect_schema(
     effect_id: String,
-) -> Result<Vec<legacy::blade_power::EffectSetting>, String> {
+) -> Result<Vec<blade_power::EffectSetting>, String> {
     match effect_id.as_str() {
-        "bladepower" => Ok(legacy::blade_power::get_schema()),
-        "scan" => Ok(legacy::scan::get_schema()),
-        // Add cases for simple effects if they get schemas later
-        // "fade" | "rainbow" => Ok(simple::get_simple_schema()),
+        "bladepower" => Ok(blade_power::get_schema()),
+        "scan" => Ok(scan::get_schema()),
         _ => Err(format!("Schema not found for effect: {}", effect_id)),
     }
-}
-// --- END: THE CORRECT, UNIVERSAL SCHEMA COMMAND ---
-
-#[derive(Deserialize, Serialize, Type, Clone)]
-#[serde(tag = "mode", content = "config")]
-pub enum EffectConfig {
-    #[serde(rename = "legacy")]
-    Legacy(crate::effects::legacy::blade_power::BladePowerLegacyConfig),
-    #[serde(rename = "blade")]
-    Blade(crate::effects::blade::blade_power::BladePowerConfig),
-    #[serde(rename = "scan")]
-    Scan(crate::effects::legacy::scan::ScanLegacyConfig),
 }
 
 pub enum EngineCommand {
     StartEffect {
         ip_address: String,
         led_count: u32,
-        effect_id: String,
-        config: Option<EffectConfig>,
+        config: EffectConfig,
     },
     StopEffect {
         ip_address: String,
@@ -67,9 +81,11 @@ pub enum EngineCommand {
     },
     UpdateSettings {
         ip_address: String,
-        settings: Option<EffectConfig>,
+        settings: EffectConfig,
     },
 }
+
+pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);
 
 pub fn run_effect_engine(
     command_rx: mpsc::Receiver<EngineCommand>,
@@ -82,7 +98,7 @@ pub fn run_effect_engine(
     let mut frame_count: u8 = 0;
     let mut latest_frames: HashMap<String, Vec<u8>> = HashMap::new();
     let mut target_frame_duration = Duration::from_millis(1000 / 60);
-    
+
     loop {
         let frame_start = Instant::now();
         while let Ok(command) = command_rx.try_recv() {
@@ -90,7 +106,6 @@ pub fn run_effect_engine(
                 EngineCommand::StartEffect {
                     ip_address,
                     led_count,
-                    effect_id,
                     config,
                 } => {
                     if let Some(removed) = active_effects.remove(&ip_address) {
@@ -99,41 +114,33 @@ pub fn run_effect_engine(
                         let _ = ddp::send_ddp_packet(&socket, &destination, 0, &black_data, 0);
                     }
 
-                    let effect: Option<Box<dyn Effect>> = match effect_id.as_str() {
-                        "bladepower" => {
-                            let effect_config = if let Some(EffectConfig::Legacy(c)) = config { c } else {
-                                let default_map = legacy::blade_power::get_schema().into_iter()
-                                    .map(|s| (s.id, serde_json::to_value(s.default_value).unwrap()))
-                                    .collect::<serde_json::Map<String, Value>>();
-                                serde_json::from_value(serde_json::Value::Object(default_map)).unwrap()
-                            };
-                            Some(Box::new(legacy::blade_power::BladePowerLegacy::new(effect_config)))
-                        },
-                        "scan" => {
-                             let effect_config = if let Some(EffectConfig::Scan(c)) = config { c } else {
-                                let default_map = legacy::scan::get_schema().into_iter()
-                                    .map(|s| (s.id, serde_json::to_value(s.default_value).unwrap()))
-                                    .collect::<serde_json::Map<String, Value>>();
-                                serde_json::from_value(serde_json::Value::Object(default_map)).unwrap()
-                            };
-                            Some(Box::new(legacy::scan::ScanLegacy::new(effect_config)))
-                        },
-                        "fade" => Some(Box::new(simple::FadeEffect::new())),
-                        "rainbow" => Some(Box::new(simple::RainbowEffect::new())),
-                        _ => None,
+                    let effect: Box<dyn Effect> = match config {
+                        EffectConfig::BladePower(c) => Box::new(blade_power::BladePower::new(c)),
+                        EffectConfig::Scan(c) => Box::new(scan::Scan::new(c)),
                     };
 
-                    if let Some(effect) = effect {
-                        let pixel_count = led_count as usize;
-                        active_effects.insert(ip_address, ActiveEffect {
+                    let pixel_count = led_count as usize;
+                    active_effects.insert(
+                        ip_address,
+                        ActiveEffect {
                             led_count,
                             effect,
                             r_channel: vec![0.0; pixel_count],
                             g_channel: vec![0.0; pixel_count],
                             b_channel: vec![0.0; pixel_count],
-                        });
-                    } else {
-                        eprintln!("Failed to create effect with id '{}'", effect_id);
+                        },
+                    );
+                }
+                EngineCommand::UpdateSettings {
+                    ip_address,
+                    settings,
+                } => {
+                    if let Some(active_effect) = active_effects.get_mut(&ip_address) {
+                        let config_value = match settings {
+                            EffectConfig::BladePower(c) => serde_json::to_value(c).unwrap(),
+                            EffectConfig::Scan(c) => serde_json::to_value(c).unwrap(),
+                        };
+                        active_effect.effect.update_config(config_value);
                     }
                 }
                 EngineCommand::StopEffect { ip_address } => {
@@ -155,21 +162,6 @@ pub fn run_effect_engine(
                         target_frame_duration = Duration::from_millis(1000 / fps as u64);
                     }
                 }
-                EngineCommand::UpdateSettings {
-                    ip_address,
-                    settings,
-                } => {
-                    if let Some(active_effect) = active_effects.get_mut(&ip_address) {
-                        if let Some(config_enum) = settings {
-                            let config_value = match config_enum {
-                                EffectConfig::Legacy(config) => serde_json::to_value(config).unwrap(),
-                                EffectConfig::Blade(config) => serde_json::to_value(config).unwrap(),
-                                EffectConfig::Scan(config) => serde_json::to_value(config).unwrap(),
-                            };
-                            active_effect.effect.update_config(config_value);
-                        }
-                    }
-                }
             }
         }
 
@@ -179,12 +171,14 @@ pub fn run_effect_engine(
         for (ip, active_effect) in &mut active_effects {
             let mut frame = vec![0u8; (active_effect.led_count * 3) as usize];
             let pixel_count = frame.len() / 3;
-            
+
             let mut pure_render = vec![0u8; pixel_count * 3];
-            active_effect.effect.render(&latest_audio_data, &mut pure_render);
-            
+            active_effect
+                .effect
+                .render(&latest_audio_data, &mut pure_render);
+
             let base_config = active_effect.effect.get_base_config();
-            
+
             for i in 0..pixel_count {
                 active_effect.r_channel[i] = pure_render[i * 3] as f32;
                 active_effect.g_channel[i] = pure_render[i * 3 + 1] as f32;
@@ -196,7 +190,7 @@ pub fn run_effect_engine(
                 dsp::gaussian_blur_1d(&mut active_effect.g_channel, base_config.blur);
                 dsp::gaussian_blur_1d(&mut active_effect.b_channel, base_config.blur);
             }
-            
+
             if base_config.mirror {
                 let half_len = pixel_count / 2;
                 let r_clone = active_effect.r_channel.clone();
@@ -208,14 +202,22 @@ pub fn run_effect_engine(
                     let first_half_g = &g_clone[0..half_len];
                     let first_half_b = &b_clone[0..half_len];
 
-                    active_effect.r_channel[0..half_len].copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
-                    active_effect.g_channel[0..half_len].copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
-                    active_effect.b_channel[0..half_len].copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
+                    active_effect.r_channel[0..half_len].copy_from_slice(
+                        &first_half_r.iter().rev().cloned().collect::<Vec<f32>>(),
+                    );
+                    active_effect.g_channel[0..half_len].copy_from_slice(
+                        &first_half_g.iter().rev().cloned().collect::<Vec<f32>>(),
+                    );
+                    active_effect.b_channel[0..half_len].copy_from_slice(
+                        &first_half_b.iter().rev().cloned().collect::<Vec<f32>>(),
+                    );
 
-                    active_effect.r_channel[pixel_count - half_len..].copy_from_slice(first_half_r);
-                    active_effect.g_channel[pixel_count - half_len..].copy_from_slice(first_half_g);
-                    active_effect.b_channel[pixel_count - half_len..].copy_from_slice(first_half_b);
-                    
+                    active_effect.r_channel[pixel_count - half_len..]
+                        .copy_from_slice(first_half_r);
+                    active_effect.g_channel[pixel_count - half_len..]
+                        .copy_from_slice(first_half_g);
+                    active_effect.b_channel[pixel_count - half_len..]
+                        .copy_from_slice(first_half_b);
                 } else {
                     for i in 0..half_len {
                         let mirror_i = pixel_count - 1 - i;
@@ -229,12 +231,16 @@ pub fn run_effect_engine(
                 active_effect.g_channel.reverse();
                 active_effect.b_channel.reverse();
             }
-            
-            let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0,0,0]);
+
+            let bg_color =
+                colors::parse_single_color(&base_config.background_color).unwrap_or([0, 0, 0]);
             for i in 0..pixel_count {
-                frame[i * 3]     = (active_effect.r_channel[i] as u8).saturating_add(bg_color[0]);
-                frame[i * 3 + 1] = (active_effect.g_channel[i] as u8).saturating_add(bg_color[1]);
-                frame[i * 3 + 2] = (active_effect.b_channel[i] as u8).saturating_add(bg_color[2]);
+                frame[i * 3] = (active_effect.r_channel[i] as u8)
+                    .saturating_add(bg_color[0]);
+                frame[i * 3 + 1] = (active_effect.g_channel[i] as u8)
+                    .saturating_add(bg_color[1]);
+                frame[i * 3 + 2] = (active_effect.b_channel[i] as u8)
+                    .saturating_add(bg_color[2]);
             }
 
             let destination = format!("{}:4048", ip);
@@ -259,87 +265,88 @@ pub fn run_effect_engine(
     }
 }
 
-// All Tauri commands are unchanged
+// --- START: THE FIX ---
+// The compiler was right. We need to access the sender INSIDE the State wrapper.
+// This fix is applied to ALL Tauri commands.
 #[tauri::command]
 #[specta::specta]
 pub fn start_effect(
     ip_address: String,
     led_count: u32,
-    effect_id: String,
-    config: Option<EffectConfig>,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
+    config: EffectConfig,
+    command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx
+        .0 // Access the sender inside the tuple struct
         .send(EngineCommand::StartEffect {
             ip_address,
             led_count,
-            effect_id,
             config,
         })
-        .unwrap();
-    Ok(())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn stop_effect(
     ip_address: String,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
+    command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx
+        .0
         .send(EngineCommand::StopEffect { ip_address })
-        .unwrap();
-    Ok(())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn subscribe_to_frames(
     ip_address: String,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
+    command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx
+        .0
         .send(EngineCommand::Subscribe { ip_address })
-        .unwrap();
-    Ok(())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn unsubscribe_from_frames(
     ip_address: String,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
+    command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx
+        .0
         .send(EngineCommand::Unsubscribe { ip_address })
-        .unwrap();
-    Ok(())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn set_target_fps(
     fps: u32,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
+    command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx
+        .0
         .send(EngineCommand::SetTargetFps { fps })
-        .unwrap();
-    Ok(())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn update_effect_settings(
     ip_address: String,
-    settings: Option<EffectConfig>,
-    command_tx: State<mpsc::Sender<EngineCommand>>,
+    settings: EffectConfig,
+    command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx
+        .0
         .send(EngineCommand::UpdateSettings {
             ip_address,
             settings,
         })
-        .unwrap();
-    Ok(())
+        .map_err(|e| e.to_string())
 }
+// --- END: THE FIX ---

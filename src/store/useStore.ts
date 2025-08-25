@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { WledDevice, AudioDevice, EffectSetting } from '../bindings';
+import type { WledDevice, AudioDevice, EffectSetting, EffectInfo } from '../bindings';
 
 type EffectSettingsByDevice = Record<string, Record<string, Record<string, any>>>;
 
@@ -32,6 +32,8 @@ interface IStore {
   setOpenMelbankVisualizer: (openMelbankVisualizer: boolean) => void;
   effectSettings: EffectSettingsByDevice;
   setEffectSettings: (effectSettings: EffectSettingsByDevice) => void;
+  availableEffects: EffectInfo[];
+  setAvailableEffects: (effects: EffectInfo[]) => void;
 }
 
 export const useStore = create<IStore>((set) => ({
@@ -63,4 +65,6 @@ export const useStore = create<IStore>((set) => ({
   setOpenSettings: (openSettings) => set({ openSettings }),
   openMelbankVisualizer: false,
   setOpenMelbankVisualizer: (openMelbankVisualizer) => set({ openMelbankVisualizer }),
+  availableEffects: [],
+  setAvailableEffects: (effects) => set({ availableEffects: effects }),
 }));

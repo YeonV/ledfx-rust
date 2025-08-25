@@ -13,9 +13,9 @@ async discoverWled(durationSecs: number | null) : Promise<Result<null, string>> 
     else return { status: "error", error: e  as any };
 }
 },
-async startEffect(ipAddress: string, ledCount: number, effectId: string, config: EffectConfig | null) : Promise<Result<null, string>> {
+async startEffect(ipAddress: string, ledCount: number, config: EffectConfig) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("start_effect", { ipAddress, ledCount, effectId, config }) };
+    return { status: "ok", data: await TAURI_INVOKE("start_effect", { ipAddress, ledCount, config }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -53,7 +53,15 @@ async setTargetFps(fps: number) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async updateEffectSettings(ipAddress: string, settings: EffectConfig | null) : Promise<Result<null, string>> {
+async getEffectSchema(effectId: string) : Promise<Result<EffectSetting[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_effect_schema", { effectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateEffectSettings(ipAddress: string, settings: EffectConfig) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("update_effect_settings", { ipAddress, settings }) };
 } catch (e) {
@@ -61,9 +69,9 @@ async updateEffectSettings(ipAddress: string, settings: EffectConfig | null) : P
     else return { status: "error", error: e  as any };
 }
 },
-async getEffectSchema(effectId: string) : Promise<Result<EffectSetting[], string>> {
+async getAvailableEffects() : Promise<Result<EffectInfo[], string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_effect_schema", { effectId }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_available_effects") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -124,16 +132,16 @@ async updateDspSettings(newSettings: DspSettings) : Promise<Result<null, string>
 export type AudioAnalysisData = { melbanks: number[] }
 export type AudioDevice = { name: string }
 export type BaseEffectConfig = { mirror: boolean; flip: boolean; blur: number; background_color: string }
-export type BladePowerConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { sensitivity: number }
-export type BladePowerLegacyConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { decay: number; multiplier: number; frequency_range: string; gradient: string }
+export type BladePowerConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { decay: number; multiplier: number; frequency_range: string; gradient: string }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean
 export type DspSettings = { smoothing_factor: number; agc_attack: number; agc_decay: number }
-export type EffectConfig = { mode: "legacy"; config: BladePowerLegacyConfig } | { mode: "blade"; config: BladePowerConfig } | { mode: "scan"; config: ScanLegacyConfig }
+export type EffectConfig = { type: "BladePower"; config: BladePowerConfig } | { type: "Scan"; config: ScanConfig }
+export type EffectInfo = { id: string; name: string; variant: string }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
 export type LedsInfo = { count: number }
 export type MapInfo = { id: number }
-export type ScanLegacyConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { speed: number; width: number; gradient: string }
+export type ScanConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { speed: number; width: number; gradient: string }
 export type WledDevice = { ip_address: string; port: number; name: string; version: string; leds: LedsInfo; udp_port: number; architecture: string; maps: MapInfo[] }
 
 /** tauri-specta globals **/

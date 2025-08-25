@@ -7,15 +7,15 @@ import {
     Slider,
     Typography,
     Card,
-    CardHeader,
-    FormControl,
-    InputLabel,
+    // CardHeader,
+    // FormControl,
+    // InputLabel,
     Select,
     MenuItem,
     SelectChangeEvent,
-    CardContent,
-    ToggleButtonGroup,
-    ToggleButton,
+    // CardContent,
+    // ToggleButtonGroup,
+    // ToggleButton,
     IconButton,
     Accordion,
     AccordionSummary,
@@ -24,7 +24,7 @@ import {
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import SpeedIcon from '@mui/icons-material/Speed';
 import SettingsIcon from "@mui/icons-material/Settings";
-import YZLogo2 from "../Icons/YZ-Logo2";
+// import YZLogo2 from "../Icons/YZ-Logo2";
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import { useStore } from "../../store/useStore";
 import DspSettings from "./DspSettings";
@@ -67,7 +67,7 @@ export function Settings() {
                 </IconButton>
             </Stack>
             </Card>
-            <Card variant="outlined">
+            {/* <Card variant="outlined">
                 <CardContent>
                     <Stack direction={'row'} justifyContent="space-between" alignItems="center">
                         <Stack direction="row" alignItems="center" spacing={1}>
@@ -85,7 +85,7 @@ export function Settings() {
                         </ToggleButtonGroup>
                     </Stack>
                 </CardContent>
-            </Card>
+            </Card> */}
             <SettingsRow icon={<TrackChangesIcon />} title={`Scan Duration: ${duration}s`}>
                 <Slider
                     value={duration}
