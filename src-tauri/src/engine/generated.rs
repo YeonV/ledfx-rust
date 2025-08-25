@@ -3,7 +3,7 @@
 use crate::effects;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use super::{EffectInfo};
+use super::EffectInfo;
 
 #[derive(Deserialize, Serialize, Type, Clone)]
 #[serde(tag = "type", content = "config")]
