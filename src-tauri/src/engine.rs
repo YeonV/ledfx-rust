@@ -1,7 +1,8 @@
 use crate::audio::SharedAudioData;
-use crate::effects::{blade, legacy, simple, Effect};
+use crate::effects::{legacy, simple, Effect};
 use crate::utils::{colors, ddp, dsp};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use specta::Type;
 use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
@@ -18,16 +19,21 @@ struct ActiveEffect {
     b_channel: Vec<f32>,
 }
 
+// --- START: THE CORRECT, UNIVERSAL SCHEMA COMMAND ---
 #[tauri::command]
 #[specta::specta]
-pub fn get_legacy_effect_schema(
+pub fn get_effect_schema(
     effect_id: String,
 ) -> Result<Vec<legacy::blade_power::EffectSetting>, String> {
     match effect_id.as_str() {
         "bladepower" => Ok(legacy::blade_power::get_schema()),
-        _ => Err(format!("Schema not found for legacy effect: {}", effect_id)),
+        "scan" => Ok(legacy::scan::get_schema()),
+        // Add cases for simple effects if they get schemas later
+        // "fade" | "rainbow" => Ok(simple::get_simple_schema()),
+        _ => Err(format!("Schema not found for effect: {}", effect_id)),
     }
 }
+// --- END: THE CORRECT, UNIVERSAL SCHEMA COMMAND ---
 
 #[derive(Deserialize, Serialize, Type, Clone)]
 #[serde(tag = "mode", content = "config")]
@@ -36,6 +42,8 @@ pub enum EffectConfig {
     Legacy(crate::effects::legacy::blade_power::BladePowerLegacyConfig),
     #[serde(rename = "blade")]
     Blade(crate::effects::blade::blade_power::BladePowerConfig),
+    #[serde(rename = "scan")]
+    Scan(crate::effects::legacy::scan::ScanLegacyConfig),
 }
 
 pub enum EngineCommand {
@@ -85,22 +93,34 @@ pub fn run_effect_engine(
                     effect_id,
                     config,
                 } => {
-                    let effect: Option<Box<dyn Effect>> = if let Some(config_data) = config {
-                        match config_data {
-                            EffectConfig::Legacy(conf) => {
-                                Some(Box::new(legacy::blade_power::BladePowerLegacy::new(conf)))
-                            }
-                            EffectConfig::Blade(conf) => Some(Box::new(
-                                blade::blade_power::BladePower::new(conf),
-                            )),
-                        }
-                    } else {
-                        // Use the new constructors for simple effects
-                        match effect_id.as_str() {
-                            "scan" => Some(Box::new(simple::ScanEffect::new())),
-                            "scroll" => Some(Box::new(simple::ScrollEffect::new())),
-                            _ => Some(Box::new(simple::RainbowEffect::new())),
-                        }
+                    if let Some(removed) = active_effects.remove(&ip_address) {
+                        let black_data = vec![0; (removed.led_count * 3) as usize];
+                        let destination = format!("{}:4048", ip_address);
+                        let _ = ddp::send_ddp_packet(&socket, &destination, 0, &black_data, 0);
+                    }
+
+                    let effect: Option<Box<dyn Effect>> = match effect_id.as_str() {
+                        "bladepower" => {
+                            let effect_config = if let Some(EffectConfig::Legacy(c)) = config { c } else {
+                                let default_map = legacy::blade_power::get_schema().into_iter()
+                                    .map(|s| (s.id, serde_json::to_value(s.default_value).unwrap()))
+                                    .collect::<serde_json::Map<String, Value>>();
+                                serde_json::from_value(serde_json::Value::Object(default_map)).unwrap()
+                            };
+                            Some(Box::new(legacy::blade_power::BladePowerLegacy::new(effect_config)))
+                        },
+                        "scan" => {
+                             let effect_config = if let Some(EffectConfig::Scan(c)) = config { c } else {
+                                let default_map = legacy::scan::get_schema().into_iter()
+                                    .map(|s| (s.id, serde_json::to_value(s.default_value).unwrap()))
+                                    .collect::<serde_json::Map<String, Value>>();
+                                serde_json::from_value(serde_json::Value::Object(default_map)).unwrap()
+                            };
+                            Some(Box::new(legacy::scan::ScanLegacy::new(effect_config)))
+                        },
+                        "fade" => Some(Box::new(simple::FadeEffect::new())),
+                        "rainbow" => Some(Box::new(simple::RainbowEffect::new())),
+                        _ => None,
                     };
 
                     if let Some(effect) = effect {
@@ -144,6 +164,7 @@ pub fn run_effect_engine(
                             let config_value = match config_enum {
                                 EffectConfig::Legacy(config) => serde_json::to_value(config).unwrap(),
                                 EffectConfig::Blade(config) => serde_json::to_value(config).unwrap(),
+                                EffectConfig::Scan(config) => serde_json::to_value(config).unwrap(),
                             };
                             active_effect.effect.update_config(config_value);
                         }
@@ -159,51 +180,43 @@ pub fn run_effect_engine(
             let mut frame = vec![0u8; (active_effect.led_count * 3) as usize];
             let pixel_count = frame.len() / 3;
             
-            // --- START: THE FINAL, CORRECT PIPELINE ---
-
-            // 1. Render the pure effect into a temporary buffer.
             let mut pure_render = vec![0u8; pixel_count * 3];
             active_effect.effect.render(&latest_audio_data, &mut pure_render);
             
             let base_config = active_effect.effect.get_base_config();
             
-            // 2. Deconstruct into float buffers for processing.
             for i in 0..pixel_count {
                 active_effect.r_channel[i] = pure_render[i * 3] as f32;
                 active_effect.g_channel[i] = pure_render[i * 3 + 1] as f32;
                 active_effect.b_channel[i] = pure_render[i * 3 + 2] as f32;
             }
 
-            // 3. Apply Blur.
             if base_config.blur > 0.0 {
                 dsp::gaussian_blur_1d(&mut active_effect.r_channel, base_config.blur);
                 dsp::gaussian_blur_1d(&mut active_effect.g_channel, base_config.blur);
                 dsp::gaussian_blur_1d(&mut active_effect.b_channel, base_config.blur);
             }
             
-            // 4. Handle Mirror and Flip combinations.
             if base_config.mirror {
                 let half_len = pixel_count / 2;
                 let r_clone = active_effect.r_channel.clone();
                 let g_clone = active_effect.g_channel.clone();
                 let b_clone = active_effect.b_channel.clone();
 
-                if base_config.flip { // Center-out
+                if base_config.flip {
                     let first_half_r = &r_clone[0..half_len];
                     let first_half_g = &g_clone[0..half_len];
                     let first_half_b = &b_clone[0..half_len];
 
-                    // Left side of strip gets first half of bar, reversed
                     active_effect.r_channel[0..half_len].copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
                     active_effect.g_channel[0..half_len].copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
                     active_effect.b_channel[0..half_len].copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
 
-                    // Right side of strip gets first half of bar
                     active_effect.r_channel[pixel_count - half_len..].copy_from_slice(first_half_r);
                     active_effect.g_channel[pixel_count - half_len..].copy_from_slice(first_half_g);
                     active_effect.b_channel[pixel_count - half_len..].copy_from_slice(first_half_b);
                     
-                } else { // Outside-in
+                } else {
                     for i in 0..half_len {
                         let mirror_i = pixel_count - 1 - i;
                         active_effect.r_channel[mirror_i] = r_clone[i];
@@ -211,20 +224,18 @@ pub fn run_effect_engine(
                         active_effect.b_channel[mirror_i] = b_clone[i];
                     }
                 }
-            } else if base_config.flip { // Standard flip
+            } else if base_config.flip {
                 active_effect.r_channel.reverse();
                 active_effect.g_channel.reverse();
                 active_effect.b_channel.reverse();
             }
             
-            // 5. Composite the final frame.
             let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0,0,0]);
             for i in 0..pixel_count {
                 frame[i * 3]     = (active_effect.r_channel[i] as u8).saturating_add(bg_color[0]);
                 frame[i * 3 + 1] = (active_effect.g_channel[i] as u8).saturating_add(bg_color[1]);
                 frame[i * 3 + 2] = (active_effect.b_channel[i] as u8).saturating_add(bg_color[2]);
             }
-            // --- END: THE FINAL, CORRECT PIPELINE ---
 
             let destination = format!("{}:4048", ip);
             let _ = ddp::send_ddp_packet(&socket, &destination, 0, &frame, frame_count);

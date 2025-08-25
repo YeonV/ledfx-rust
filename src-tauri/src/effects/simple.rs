@@ -45,14 +45,13 @@ pub fn get_simple_schema() -> Vec<EffectSetting> {
 
 
 pub struct RainbowEffect {
-    pub hue: f32,
+    // It no longer needs state
     config: BaseEffectConfig,
 }
 
 impl RainbowEffect {
     pub fn new() -> Self {
         Self {
-            hue: 0.0,
             config: BaseEffectConfig {
                 mirror: false,
                 flip: false,
@@ -65,12 +64,13 @@ impl RainbowEffect {
 
 impl Effect for RainbowEffect {
     fn render(&mut self, _audio_data: &AudioAnalysisData, frame: &mut [u8]) {
-        self.hue = (self.hue + 1.0) % 360.0;
-        let rgb = hsv_to_rgb(self.hue, 1.0, 1.0);
-        for pixel in frame.chunks_mut(3) {
-            pixel[0] = rgb[0];
-            pixel[1] = rgb[1];
-            pixel[2] = rgb[2];
+        let pixel_count = frame.len() / 3;
+        for i in 0..pixel_count {
+            let hue = (i as f32 * 360.0) / pixel_count as f32;
+            let rgb = hsv_to_rgb(hue, 1.0, 1.0);
+            frame[i * 3] = rgb[0];
+            frame[i * 3 + 1] = rgb[1];
+            frame[i * 3 + 2] = rgb[2];
         }
     }
 
@@ -85,60 +85,15 @@ impl Effect for RainbowEffect {
     }
 }
 
-pub struct ScanEffect {
-    pub position: u32,
-    pub color: [u8; 3],
-    config: BaseEffectConfig,
-}
+// ScanEffect is removed from here
 
-impl ScanEffect {
-    pub fn new() -> Self {
-        Self {
-            position: 0,
-            color: [255, 0, 0],
-            config: BaseEffectConfig {
-                mirror: false,
-                flip: false,
-                blur: 0.0,
-                background_color: "#000000".to_string(),
-            }
-        }
-    }
-}
-
-impl Effect for ScanEffect {
-    fn render(&mut self, _audio_data: &AudioAnalysisData, frame: &mut [u8]) {
-        let pixel_count = (frame.len() / 3) as u32;
-        if pixel_count == 0 { return; }
-        
-        self.position = (self.position + 1) % pixel_count;
-        frame.fill(0);
-        
-        let start_index = (self.position * 3) as usize;
-        if start_index + 2 < frame.len() {
-            frame[start_index] = self.color[0];
-            frame[start_index + 1] = self.color[1];
-            frame[start_index + 2] = self.color[2];
-        }
-    }
-
-    fn update_config(&mut self, config: Value) {
-        if let Ok(new_config) = serde_json::from_value(config) {
-            self.config = new_config;
-        }
-    }
-
-    fn get_base_config(&self) -> BaseEffectConfig {
-        self.config.clone()
-    }
-}
-
-pub struct ScrollEffect {
+// --- FadeEffect is the new name for the scrolling rainbow ---
+pub struct FadeEffect {
     pub hue: f32,
     config: BaseEffectConfig,
 }
 
-impl ScrollEffect {
+impl FadeEffect {
     pub fn new() -> Self {
         Self {
             hue: 0.0,
@@ -152,7 +107,7 @@ impl ScrollEffect {
     }
 }
 
-impl Effect for ScrollEffect {
+impl Effect for FadeEffect {
     fn render(&mut self, _audio_data: &AudioAnalysisData, frame: &mut [u8]) {
         let pixel_count = frame.len() / 3;
         self.hue = (self.hue + 0.5) % 360.0;

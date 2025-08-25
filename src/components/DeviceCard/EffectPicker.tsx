@@ -27,7 +27,7 @@ export const EffectPicker = memo(({
     >
       <MenuItem value="none" disabled>Choose Effect</MenuItem>
       <MenuItem value="rainbow">Rainbow</MenuItem>
-      <MenuItem value="scroll">Scroll</MenuItem>
+      <MenuItem value="fade">Fade</MenuItem>
       <MenuItem value="scan">Scan</MenuItem>
       <MenuItem value="bladepower">BladePower</MenuItem>
     </Select> 

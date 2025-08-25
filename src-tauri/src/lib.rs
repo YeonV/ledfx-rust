@@ -22,8 +22,8 @@ fn configure_builder() -> Builder<tauri::Wry> {
             engine::subscribe_to_frames,
             engine::unsubscribe_from_frames,
             engine::set_target_fps,
-            engine::get_legacy_effect_schema,
             engine::update_effect_settings,
+            engine::get_effect_schema,
             audio::get_audio_devices,
             audio::set_audio_device,
             audio::get_audio_analysis,
@@ -38,6 +38,7 @@ fn configure_builder() -> Builder<tauri::Wry> {
         .typ::<legacy::blade_power::Control>()
         .typ::<engine::EffectConfig>()
         .typ::<audio::DspSettings>()
+        .typ::<crate::effects::BaseEffectConfig>()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

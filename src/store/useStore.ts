@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { WledDevice, AudioDevice, EffectSetting } from '../bindings';
 
+type EffectSettingsByDevice = Record<string, Record<string, Record<string, any>>>;
+
 interface IStore {
   devices: WledDevice[];
   setDevices: (devices: WledDevice[]) => void;
@@ -24,12 +26,12 @@ interface IStore {
   setEngineMode: (engineMode: 'legacy' | 'blade') => void;
   effectSchemas: Record<string, EffectSetting[]>;
   setEffectSchemas: (effectSchemas: Record<string, EffectSetting[]>) => void;
-  effectSettings: Record<string, Record<string, any>>;
-  setEffectSettings: (effectSettings: Record<string, Record<string, any>>) => void;
   openSettings: boolean;
   setOpenSettings: (openSettings: boolean) => void;
   openMelbankVisualizer: boolean;
   setOpenMelbankVisualizer: (openMelbankVisualizer: boolean) => void;
+  effectSettings: EffectSettingsByDevice;
+  setEffectSettings: (effectSettings: EffectSettingsByDevice) => void;
 }
 
 export const useStore = create<IStore>((set) => ({

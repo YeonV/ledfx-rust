@@ -1,148 +1,160 @@
-// src/components/Devices.tsx
-
 import { useCallback } from "react";
 import { DeviceCard } from "./DeviceCard/DeviceCard";
 import { commands } from "../bindings";
 import { useStore } from "../store/useStore";
 import { Grid } from "@mui/material";
-import type { WledDevice, BladePowerLegacyConfig, BladePowerConfig, EffectConfig } from "../bindings";
+import type { WledDevice, BladePowerLegacyConfig, EffectConfig, BaseEffectConfig, EffectSetting } from "../bindings";
 
-/**
- * Device management component for controlling WLED devices.
- */
+const buildConfigPayload = (effectId: string, settings: Record<string, any>): EffectConfig | null => {
+    const base: BaseEffectConfig = {
+        mirror: !!settings.mirror,
+        flip: !!settings.flip,
+        blur: Number(settings.blur),
+        background_color: String(settings.background_color),
+    };
+
+    if (effectId === 'bladepower') {
+        return {
+            mode: 'legacy',
+            config: {
+                decay: Number(settings.decay),
+                multiplier: Number(settings.multiplier),
+                frequency_range: String(settings.frequency_range),
+                gradient: String(settings.gradient),
+                ...base,
+            }
+        };
+    }
+    if (effectId === 'scan') {
+        return {
+            mode: 'scan',
+            config: {
+                speed: Number(settings.speed),
+                width: Number(settings.width),
+                gradient: String(settings.gradient),
+                ...base,
+            }
+        };
+    }
+    return null;
+};
+
 export function Devices() {
   const {
     devices,
     activeEffects, setActiveEffects,
     selectedEffects, setSelectedEffects,
-    engineMode,
     effectSchemas, setEffectSchemas,
     effectSettings, setEffectSettings,
   } = useStore();
 
-  console.log(devices)
   const handleEffectSelection = useCallback(
     async (device: WledDevice, newEffectId: string) => {
-      setSelectedEffects({
-        ...selectedEffects,
-        [device.ip_address]: newEffectId,
-      });
+      setSelectedEffects({ ...selectedEffects, [device.ip_address]: newEffectId });
 
-      if (!effectSchemas[newEffectId]) {
-        try {
-          const result = await commands.getLegacyEffectSchema(newEffectId);
-          if (result.status === "ok") {
-            const schema = result.data;
-            setEffectSchemas({ ...effectSchemas, [newEffectId]: schema });
-            const defaultSettings = Object.fromEntries(
-              schema.map((s) => [s.id, s.defaultValue])
-            );
-            setEffectSettings({ ...effectSettings, [device.ip_address]: defaultSettings });
-          }
-        } catch (e) {
-          console.error(e);
+      const deviceIp = device.ip_address;
+      const effectAlreadyHasSettings = effectSettings[deviceIp]?.[newEffectId];
+
+      if (!effectAlreadyHasSettings) {
+        if (!effectSchemas[newEffectId]) {
+          try {
+            const result = await commands.getEffectSchema(newEffectId);
+            if (result.status === "ok") {
+              const schema = result.data;
+              setEffectSchemas({ ...effectSchemas, [newEffectId]: schema });
+              const defaultSettings = Object.fromEntries(schema.map((s: EffectSetting) => [s.id, s.defaultValue]));
+              setEffectSettings({
+                ...effectSettings,
+                [deviceIp]: {
+                  ...effectSettings[deviceIp],
+                  [newEffectId]: defaultSettings,
+                },
+              });
+              if (activeEffects[deviceIp]) {
+                handleStartEffect(device, newEffectId, defaultSettings);
+              }
+            }
+          } catch (e) { console.error(e); }
+        }
+      } else {
+        if (activeEffects[deviceIp]) {
+          handleStartEffect(device, newEffectId);
         }
       }
-
-      if (activeEffects[device.ip_address]) {
-        handleStartEffect(device, newEffectId);
-      }
     },
-    [activeEffects, effectSchemas]
+    [activeEffects, effectSchemas, effectSettings, selectedEffects]
   );
-
+  
   const handleSettingsChange = useCallback(
     (ip: string, id: string, value: any) => {
+      const effectId = selectedEffects[ip];
+      if (!effectId) return;
+
+      const newSettingsForEffect = { ...effectSettings[ip]?.[effectId], [id]: value };
       const newSettings = {
-        ...effectSettings[ip],
-        [id]: value,
+        ...effectSettings,
+        [ip]: {
+          ...effectSettings[ip],
+          [effectId]: newSettingsForEffect,
+        }
       };
-      setEffectSettings({ ...effectSettings, [ip]: newSettings });
+      setEffectSettings(newSettings);
 
       if (activeEffects[ip]) {
-        let configPayload: EffectConfig;
-        if (engineMode === "legacy") {
-          configPayload = {
-            mode: engineMode,
-            config: newSettings as BladePowerLegacyConfig,
-          };
-        } else {
-          configPayload = {
-            mode: "blade",
-            config: newSettings as BladePowerConfig,
-          };
+        const configPayload = buildConfigPayload(effectId, newSettingsForEffect);
+        if (configPayload) {
+            commands.updateEffectSettings(ip, configPayload).catch(console.error);
         }
-        commands.updateEffectSettings(ip, configPayload).catch(console.error);
       }
     },
-    [activeEffects, effectSettings, engineMode]
+    [activeEffects, effectSettings, selectedEffects]
   );
 
   const handleStartEffect = useCallback(
-    async (device: WledDevice, effectIdOverride?: string) => {
-      const effectId =
-        effectIdOverride || selectedEffects[device.ip_address] || "bladepower";
+    async (device: WledDevice, effectIdOverride?: string, settingsOverride?: Record<string, any>) => {
+      const effectId = effectIdOverride || selectedEffects[device.ip_address];
+      const settings = settingsOverride || effectSettings[device.ip_address]?.[effectId];
 
+      if (!effectId || !settings) { return; }
+      
+      const configPayload = buildConfigPayload(effectId, settings);
+      
       try {
-        if (effectId === "bladepower") {
-          const settings = effectSettings[device.ip_address];
-          if (!settings) {
-            console.error("Settings not loaded for BladePower, cannot start.");
-            return;
-          }
-          const configPayload = {
-            mode: engineMode,
-            config: settings,
-          } as EffectConfig;
-          await commands.startEffect(
-            device.ip_address,
-            device.leds.count,
-            effectId,
-            configPayload
-          );
-        } else {
-          await commands.startEffect(
-            device.ip_address,
-            device.leds.count,
-            effectId,
-            null
-          );
-        }
+        await commands.startEffect(device.ip_address, device.leds.count, effectId, configPayload);
         setActiveEffects({ ...activeEffects, [device.ip_address]: true });
-      } catch (err) {
-        console.error("Failed to start effect:", err);
-      }
+      } catch (err) { console.error("Failed to start effect:", err); }
     },
-    [selectedEffects, effectSettings, engineMode]
+    [activeEffects, selectedEffects, effectSettings]
   );
 
   const handleStopEffect = useCallback(async (ip: string) => {
     try {
       await commands.stopEffect(ip);
       setActiveEffects({ ...activeEffects, [ip]: false });
-    } catch (err) {
-      console.error("Failed to stop effect:", err);
-    }
-  }, []);
+    } catch (err) { console.error("Failed to stop effect:", err); }
+  }, [activeEffects]);
 
-  console.log(effectSettings, effectSchemas);
   return (
-    <Grid container spacing={2}>
-        {devices.map((device) => (
-          <Grid key={device.ip_address}>
-            <DeviceCard
-              device={device}
-              isActive={activeEffects[device.ip_address] || false}
-              selectedEffect={selectedEffects[device.ip_address] || "none"}
-              schema={effectSchemas[selectedEffects[device.ip_address] || "bladepower"]}
-              settings={effectSettings[device.ip_address]}
-              onSettingChange={(id: string, value: any) => handleSettingsChange(device.ip_address, id, value)}
-              onEffectSelect={handleEffectSelection}
-              onStart={handleStartEffect}
-              onStop={handleStopEffect}
-            />
-          </Grid>
-        ))}
+    <Grid container spacing={2} sx={{p: 2}}>
+        {devices.map((device) => {
+            const effectId = selectedEffects[device.ip_address];
+            return (
+              // FIX: NO `item` PROP
+              <Grid key={device.ip_address}>
+                <DeviceCard
+                  device={device}
+                  isActive={activeEffects[device.ip_address] || false}
+                  selectedEffect={effectId}
+                  schema={effectSchemas[effectId]}
+                  settings={effectSettings[device.ip_address]?.[effectId]}
+                  onSettingChange={(id, value) => handleSettingsChange(device.ip_address, id, value)}
+                  onEffectSelect={handleEffectSelection}
+                  onStart={handleStartEffect}
+                  onStop={handleStopEffect}
+                />
+              </Grid>
+            )
+        })}
     </Grid>
   );
 }
