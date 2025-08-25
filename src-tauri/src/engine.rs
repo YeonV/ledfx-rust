@@ -2,6 +2,7 @@ use crate::audio::SharedAudioData;
 use crate::effects::{blade_power, scan, Effect};
 use crate::utils::{colors, ddp, dsp};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use specta::Type;
 use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
@@ -9,6 +10,9 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
+
+mod generated;
+pub use generated::*;
 
 struct ActiveEffect {
     effect: Box<dyn Effect>,
@@ -25,47 +29,11 @@ pub struct EffectInfo {
     pub variant: String,
 }
 
-#[derive(Deserialize, Serialize, Type, Clone)]
-#[serde(tag = "type", content = "config")]
-pub enum EffectConfig {
-    BladePower(blade_power::BladePowerConfig),
-    Scan(scan::ScanConfig),
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_available_effects() -> Result<Vec<EffectInfo>, String> {
-    Ok(vec![
-        EffectInfo {
-            id: "bladepower".to_string(),
-            name: "Blade Power".to_string(),
-            variant: "BladePower".to_string(),
-        },
-        EffectInfo {
-            id: "scan".to_string(),
-            name: "Scan".to_string(),
-            variant: "Scan".to_string(),
-        },
-    ])
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_effect_schema(
-    effect_id: String,
-) -> Result<Vec<blade_power::EffectSetting>, String> {
-    match effect_id.as_str() {
-        "bladepower" => Ok(blade_power::get_schema()),
-        "scan" => Ok(scan::get_schema()),
-        _ => Err(format!("Schema not found for effect: {}", effect_id)),
-    }
-}
-
 pub enum EngineCommand {
     StartEffect {
         ip_address: String,
         led_count: u32,
-        config: EffectConfig,
+        config: EffectConfig, // Now uses the generated enum
     },
     StopEffect {
         ip_address: String,
@@ -81,7 +49,7 @@ pub enum EngineCommand {
     },
     UpdateSettings {
         ip_address: String,
-        settings: EffectConfig,
+        settings: EffectConfig, // Now uses the generated enum
     },
 }
 
@@ -114,10 +82,8 @@ pub fn run_effect_engine(
                         let _ = ddp::send_ddp_packet(&socket, &destination, 0, &black_data, 0);
                     }
 
-                    let effect: Box<dyn Effect> = match config {
-                        EffectConfig::BladePower(c) => Box::new(blade_power::BladePower::new(c)),
-                        EffectConfig::Scan(c) => Box::new(scan::Scan::new(c)),
-                    };
+                    // Use the generated helper function
+                    let effect = create_effect(config);
 
                     let pixel_count = led_count as usize;
                     active_effects.insert(
@@ -265,9 +231,6 @@ pub fn run_effect_engine(
     }
 }
 
-// --- START: THE FIX ---
-// The compiler was right. We need to access the sender INSIDE the State wrapper.
-// This fix is applied to ALL Tauri commands.
 #[tauri::command]
 #[specta::specta]
 pub fn start_effect(
@@ -277,7 +240,7 @@ pub fn start_effect(
     command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx
-        .0 // Access the sender inside the tuple struct
+        .0
         .send(EngineCommand::StartEffect {
             ip_address,
             led_count,
@@ -349,4 +312,3 @@ pub fn update_effect_settings(
         })
         .map_err(|e| e.to_string())
 }
-// --- END: THE FIX ---

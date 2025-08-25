@@ -1,36 +1,39 @@
-use crate::effects::{get_base_schema, BaseEffectConfig, Effect};
+use crate::effects::{get_base_schema, BaseEffectConfig, Effect, schema::{Control, DefaultValue, EffectSetting}};
 use crate::utils::colors;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
 use crate::audio::{highs_power, lows_power, mids_power, AudioAnalysisData};
 
-#[derive(Serialize, Type, Clone)]
-#[serde(untagged)]
-pub enum DefaultValue {
-    String(String),
-    Number(f32),
-    Bool(bool),
-}
+pub const NAME: &str = "Blade Power";
 
-#[derive(Serialize, Type, Clone)]
-#[serde(rename_all = "camelCase", tag = "type")]
-pub enum Control {
-    Slider { min: f32, max: f32, step: f32 },
-    Checkbox,
-    ColorPicker,
-    Select { options: Vec<String> },
-}
 
-#[derive(Serialize, Type, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct EffectSetting {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub control: Control,
-    pub default_value: DefaultValue,
-}
+// #[derive(Serialize, Type, Clone)]
+// #[serde(untagged)]
+// pub enum DefaultValue {
+//     String(String),
+//     Number(f32),
+//     Bool(bool),
+// }
+
+// #[derive(Serialize, Type, Clone)]
+// #[serde(rename_all = "camelCase", tag = "type")]
+// pub enum Control {
+//     Slider { min: f32, max: f32, step: f32 },
+//     Checkbox,
+//     ColorPicker,
+//     Select { options: Vec<String> },
+// }
+
+// #[derive(Serialize, Type, Clone)]
+// #[serde(rename_all = "camelCase")]
+// pub struct EffectSetting {
+//     pub id: String,
+//     pub name: String,
+//     pub description: String,
+//     pub control: Control,
+//     pub default_value: DefaultValue,
+// }
 
 #[derive(Deserialize, Serialize, Type, Clone, Debug)]
 #[serde(rename_all = "snake_case")]

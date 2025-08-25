@@ -1,10 +1,11 @@
-use crate::effects::{get_base_schema, BaseEffectConfig, Effect};
+use crate::effects::{get_base_schema, BaseEffectConfig, Effect, schema::{Control, DefaultValue, EffectSetting}};
 use crate::utils::colors;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
 use crate::audio::AudioAnalysisData;
-use super::blade_power::{EffectSetting, Control, DefaultValue};
+
+pub const NAME: &str = "Scan";
 
 #[derive(Deserialize, Serialize, Type, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
