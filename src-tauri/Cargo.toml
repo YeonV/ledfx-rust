@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+heck = "0.5.0"
 # All specta dependencies are removed from here
 
 [dependencies]

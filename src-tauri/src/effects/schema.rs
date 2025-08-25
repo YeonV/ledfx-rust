@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use specta::Type;
 
 #[derive(Serialize, Type, Clone)]

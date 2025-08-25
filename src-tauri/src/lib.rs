@@ -4,7 +4,7 @@ pub mod engine;
 pub mod utils;
 pub mod wled;
 
-use crate::effects::{blade_power, scan};
+use crate::effects::{blade_power, scan, schema};
 #[cfg(debug_assertions)]
 use specta_typescript::Typescript;
 use std::sync::mpsc;
@@ -34,8 +34,8 @@ fn configure_builder() -> Builder<tauri::Wry> {
         .typ::<wled::LedsInfo>()
         .typ::<wled::MapInfo>()
         .typ::<audio::AudioDevice>()
-        .typ::<blade_power::EffectSetting>()
-        .typ::<blade_power::Control>()
+        .typ::<schema::EffectSetting>() 
+        .typ::<schema::Control>()       
         .typ::<audio::DspSettings>()
         .typ::<crate::effects::BaseEffectConfig>()
         .typ::<engine::EffectInfo>()

@@ -2011,6 +2011,7 @@ dependencies = [
  "apodize",
  "as-any",
  "cpal",
+ "heck 0.5.0",
  "jni",
  "lazy_static",
  "mdns-sd",

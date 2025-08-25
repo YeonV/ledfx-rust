@@ -1,8 +1,7 @@
 use crate::audio::SharedAudioData;
-use crate::effects::{blade_power, scan, Effect};
+use crate::effects::Effect;
 use crate::utils::{colors, ddp, dsp};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::{Serialize};
 use specta::Type;
 use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
@@ -11,6 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
+// This includes the auto-generated code from our build script
 mod generated;
 pub use generated::*;
 
@@ -33,23 +33,15 @@ pub enum EngineCommand {
     StartEffect {
         ip_address: String,
         led_count: u32,
-        config: EffectConfig, // Now uses the generated enum
+        config: EffectConfig,
     },
-    StopEffect {
-        ip_address: String,
-    },
-    Subscribe {
-        ip_address: String,
-    },
-    Unsubscribe {
-        ip_address: String,
-    },
-    SetTargetFps {
-        fps: u32,
-    },
+    StopEffect { ip_address: String },
+    Subscribe { ip_address: String },
+    Unsubscribe { ip_address: String },
+    SetTargetFps { fps: u32 },
     UpdateSettings {
         ip_address: String,
-        settings: EffectConfig, // Now uses the generated enum
+        settings: EffectConfig,
     },
 }
 
@@ -81,10 +73,7 @@ pub fn run_effect_engine(
                         let destination = format!("{}:4048", ip_address);
                         let _ = ddp::send_ddp_packet(&socket, &destination, 0, &black_data, 0);
                     }
-
-                    // Use the generated helper function
                     let effect = create_effect(config);
-
                     let pixel_count = led_count as usize;
                     active_effects.insert(
                         ip_address,
