@@ -66,7 +66,6 @@ pub fn run_effect_engine(
                     led_count,
                     config,
                 } => {
-                    println!("[ENGINE LOG] Received StartEffect for {}. Config: {:?}", ip_address, config);
                     if let Some(removed) = active_effects.remove(&ip_address) {
                         let black_data = vec![0; (removed.led_count * 3) as usize];
                         let destination = format!("{}:4048", ip_address);
@@ -89,7 +88,6 @@ pub fn run_effect_engine(
                     ip_address,
                     settings,
                 } => {
-                    println!("[ENGINE LOG] Received UpdateSettings for {}. Settings: {:?}", ip_address, settings);
                     if let Some(active_effect) = active_effects.get_mut(&ip_address) {
                         let config_value = match settings {
                             EffectConfig::BladePower(c) => serde_json::to_value(c).unwrap(),
@@ -228,7 +226,6 @@ pub fn start_effect(
     config: EffectConfig,
     command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
-    println!("[API LOG] `start_effect` command received for IP: {}. Config: {:?}", ip_address, config);
     command_tx
         .0
         .send(EngineCommand::StartEffect {
@@ -294,7 +291,6 @@ pub fn update_effect_settings(
     settings: EffectConfig,
     command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
-    println!("[API LOG] `update_effect_settings` command received for IP: {}. Settings: {:?}", ip_address, settings);
     command_tx
         .0
         .send(EngineCommand::UpdateSettings {

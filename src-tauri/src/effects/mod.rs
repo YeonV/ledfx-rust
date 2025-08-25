@@ -6,8 +6,9 @@ use serde_json::Value;
 use specta::Type;
 pub use crate::effects::schema::{Control, DefaultValue, EffectSetting};
 
-pub mod blade_power;
-pub mod scan;
+mod fx;
+pub use fx::blade_power;
+pub use fx::scan;
 
 pub mod schema;
 

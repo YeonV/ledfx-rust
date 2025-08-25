@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore';
 
 interface EffectPickerProps {
   device: WledDevice;
-  selectedEffect: string;
+  selectedEffect: string; // This prop can still be undefined from the parent
   onEffectSelect: (device: WledDevice, effectId: string) => void;
 }
 
@@ -16,15 +16,18 @@ export const EffectPicker = memo(({
 }: EffectPickerProps) => {
   const { availableEffects } = useStore();
 
+  const value = selectedEffect || '';
+
   return (
     <Select
       sx={{ mt: 1.5 }}
       size='small'
       fullWidth
-      value={selectedEffect}
+      value={value}
       onChange={(e) => onEffectSelect(device, e.target.value)}
+      displayEmpty
     >
-      <MenuItem value={undefined} disabled>Choose Effect</MenuItem>
+      <MenuItem value="" disabled><em>Choose Effect</em></MenuItem>
       {availableEffects.map(effect => (
         <MenuItem key={effect.id} value={effect.id}>{effect.name}</MenuItem>
       ))}

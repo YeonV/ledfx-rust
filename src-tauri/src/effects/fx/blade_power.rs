@@ -101,7 +101,7 @@ impl Effect for BladePower {
         };
 
         
-        println!("[BLADE_POWER LOG] Rendering frame. Power: {:.4}, Multiplier: {}, Decay: {}", power, self.config.multiplier, self.config.decay);
+        // println!("[BLADE_POWER LOG] Rendering frame. Power: {:.4}, Multiplier: {}, Decay: {}", power, self.config.multiplier, self.config.decay);
         
         let bar_level = (power * self.config.multiplier * 2.0).min(1.0);
         let bar_idx = (bar_level * pixel_count as f32) as usize;

@@ -80,7 +80,7 @@ export function Devices() {
 
   const handleStartEffect = useCallback(
     async (device: WledDevice, effectIdOverride?: string, settingsOverride?: Record<string, any>) => {
-      console.log(`[FRONTEND LOG] 1. handleStartEffect called for ${device.ip_address}`);
+      // console.log(`[FRONTEND LOG] 1. handleStartEffect called for ${device.ip_address}`);
       const effectId = effectIdOverride || selectedEffects[device.ip_address];
       const settings = settingsOverride || effectSettings[device.ip_address]?.[effectId];
       
@@ -90,13 +90,13 @@ export function Devices() {
       }
       
       const configPayload = buildConfigPayload(effectId, settings);
-      console.log('[FRONTEND LOG] 2. Built config payload:', JSON.stringify(configPayload, null, 2));
+      // console.log('[FRONTEND LOG] 2. Built config payload:', JSON.stringify(configPayload, null, 2));
       
       if (configPayload) {
         try {
-          console.log('[FRONTEND LOG] 3. Calling backend command: commands.startEffect');
+          // console.log('[FRONTEND LOG] 3. Calling backend command: commands.startEffect');
           await commands.startEffect(device.ip_address, device.leds.count, configPayload);
-          console.log('[FRONTEND LOG] 4. Backend command successful.');
+          // console.log('[FRONTEND LOG] 4. Backend command successful.');
           setActiveEffects({ ...activeEffects, [device.ip_address]: true });
         } catch (err) {
           console.error("[FRONTEND LOG] ERROR: Backend command 'startEffect' failed:", err);
