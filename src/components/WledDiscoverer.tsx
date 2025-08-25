@@ -1,16 +1,13 @@
-// src/components/WledDiscoverer.tsx
-
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "../bindings";
 import { useStore } from "../store/useStore";
 import { Wled } from "./Icons/Icons";
 import { Box, LinearProgress, Button, Alert } from "@mui/material";
-import type { WledDevice } from "../bindings";
+import type { WledDevice, Device } from "../bindings";
 
 export function WledDiscoverer() {
   const {
-    setDevices,
     isScanning, setIsScanning,
     error, setError,
     duration,
@@ -29,7 +26,7 @@ export function WledDiscoverer() {
           await commands.setAudioDevice(defaultDevice);
         }
       } else {
-        setError(result.error);
+        setError(result.error as string);
       }
     };
 
@@ -37,46 +34,48 @@ export function WledDiscoverer() {
 
     const unlistenPromise = listen<WledDevice>("wled-device-found", (event) => {
       const foundDevice = event.payload;
-      const currentDevices = useStore.getState().devices;
-      if (!currentDevices.some((d) => d.ip_address === foundDevice.ip_address)) {
-        setDevices([...currentDevices, foundDevice]);
-      }
+      const devicePayload: Device = {
+        ip_address: foundDevice.ip_address,
+        name: foundDevice.name,
+        led_count: foundDevice.leds.count,
+      };
+      commands.addDevice(devicePayload).catch(console.error);
     });
 
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, []);
+  }, [setAudioDevices, setSelectedAudioDevice, setError]); // Dependencies updated
 
-
-  const handleDiscover = async () => {
+  const handleDiscover = useCallback(async () => {
     setIsScanning(true);
     setError(null);
-    setDevices([]);
+    // We no longer manage a list of devices in the frontend store,
+    // so we don't need to clear it here.
     try {
       await commands.discoverWled(duration);
+      // The timeout is still useful to automatically stop the "Scanning..." state.
       setTimeout(() => setIsScanning(false), duration * 1000);
     } catch (err) {
       setError(err as string);
       setIsScanning(false);
     }
-  };
+  }, [duration, setIsScanning, setError]);
 
   return (
     <Box sx={{ width: "100%", p: 2 }}>
       <Button
         onClick={handleDiscover}
-        loading={isScanning}
-        loadingPosition="start"
-        startIcon={<Wled />}
+        disabled={isScanning} // Use disabled prop for clarity
         variant="contained"
       >
-        {isScanning ? "Scanning..." : "Discover"}
+        <Wled />
+        <span style={{ marginLeft: 8 }}>{isScanning ? "Scanning..." : "Discover"}</span>
       </Button>
 
-      {isScanning && <LinearProgress sx={{ mb: 2 }} />}
+      {isScanning && <LinearProgress sx={{ mt: 2, mb: 2 }} />}
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
           {error}
         </Alert>
       )}      

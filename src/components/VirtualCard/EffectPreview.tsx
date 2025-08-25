@@ -1,25 +1,37 @@
-// src/components/EffectPreview.tsx
-
 import { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
 import { useFrameStore } from '../../store/frameStore';
 import { commands } from '../../bindings';
 
 interface EffectPreviewProps {
-  ipAddress: string;
+  virtualId: string; // Changed from ipAddress
   active: boolean;
 }
 
-/**
- * Effect preview component for displaying the current effect in a PixelGraph.
- */
-export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
+export function EffectPreview({ virtualId, active }: EffectPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frame = useFrameStore((state) => state.frames[virtualId]);
 
   useEffect(() => {
-    commands.subscribeToFrames(ipAddress);
-    // console.log(`Subscribed to frames for ${ipAddress}`);
+    // The engine now sends preview frames for virtuals, but DDP packets to IPs.
+    // Subscriptions are still per-device for network efficiency.
+    // We need a way to map virtualId back to the device IPs it uses.
+    // For now, we will assume a simple mapping for device-virtuals.
+    // TODO: A more robust solution will be needed for multi-device virtuals.
+    const ipAddress = virtualId.startsWith('device_') ? virtualId.replace('device_', '') : null;
 
+    if (ipAddress) {
+      commands.subscribeToFrames(ipAddress);
+    }
+    
+    return () => {
+      if (ipAddress) {
+        commands.unsubscribeFromFrames(ipAddress);
+      }
+    };
+  }, [virtualId]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -52,25 +64,13 @@ export function EffectPreview({ ipAddress, active }: EffectPreviewProps) {
       }
     };
 
-    if (!active) {
-      drawFrame([]);
+    if (active) {
+      drawFrame(frame);
+    } else {
+      drawFrame([]); // Clear canvas if not active
     }
 
-    const unsubscribeFromStore = useFrameStore.subscribe(
-      (state) => {
-        if (active) {
-          const pixels = state.frames[ipAddress];
-          drawFrame(pixels);
-        }
-      }
-    );
-
-    return () => {
-      unsubscribeFromStore();
-      commands.unsubscribeFromFrames(ipAddress);
-      // console.log(`Unsubscribed from frames for ${ipAddress}`);
-    };
-  }, [active, ipAddress]);
+  }, [active, frame]);
 
   return (
     <Box sx={{ border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 1, overflow: 'hidden' }}>

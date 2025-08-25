@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import type { WledDevice, AudioDevice, EffectSetting, EffectInfo } from '../bindings';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo } from '../bindings';
 
-type EffectSettingsByDevice = Record<string, Record<string, Record<string, any>>>;
+type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
 interface IStore {
-  devices: WledDevice[];
-  setDevices: (devices: WledDevice[]) => void;
+  virtuals: Virtual[];
+  setVirtuals: (virtuals: Virtual[]) => void;
   isScanning: boolean;
   setIsScanning: (isScanning: boolean) => void;
   error: string | null;
@@ -22,23 +22,21 @@ interface IStore {
   setAudioDevices: (audioDevices: AudioDevice[]) => void;
   selectedAudioDevice: string;
   setSelectedAudioDevice: (selectedAudioDevice: string) => void;
-  engineMode: 'legacy' | 'blade';
-  setEngineMode: (engineMode: 'legacy' | 'blade') => void;
   effectSchemas: Record<string, EffectSetting[]>;
   setEffectSchemas: (effectSchemas: Record<string, EffectSetting[]>) => void;
+  effectSettings: EffectSettingsByVirtual;
+  setEffectSettings: (effectSettings: EffectSettingsByVirtual) => void;
   openSettings: boolean;
   setOpenSettings: (openSettings: boolean) => void;
   openMelbankVisualizer: boolean;
   setOpenMelbankVisualizer: (openMelbankVisualizer: boolean) => void;
-  effectSettings: EffectSettingsByDevice;
-  setEffectSettings: (effectSettings: EffectSettingsByDevice) => void;
   availableEffects: EffectInfo[];
   setAvailableEffects: (effects: EffectInfo[]) => void;
 }
 
 export const useStore = create<IStore>((set) => ({
-  devices: [],
-  setDevices: (devices) => set({ devices }),
+  virtuals: [],
+  setVirtuals: (virtuals) => set({ virtuals }),
   isScanning: false,
   setIsScanning: (isScanning) => set({ isScanning }),
   error: null,
@@ -55,8 +53,6 @@ export const useStore = create<IStore>((set) => ({
   setAudioDevices: (audioDevices) => set({ audioDevices }),
   selectedAudioDevice: "",
   setSelectedAudioDevice: (selectedAudioDevice) => set({ selectedAudioDevice }),
-  engineMode: "legacy",
-  setEngineMode: (engineMode) => set({ engineMode }),
   effectSchemas: {},
   setEffectSchemas: (effectSchemas) => set({ effectSchemas }),
   effectSettings: {},

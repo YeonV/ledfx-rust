@@ -1,16 +1,16 @@
 import { memo } from 'react';
-import { WledDevice } from '../../bindings';
+import { Virtual } from '../../bindings';
 import { MenuItem, Select } from '@mui/material';
 import { useStore } from '../../store/useStore';
 
 interface EffectPickerProps {
-  device: WledDevice;
-  selectedEffect: string; // This prop can still be undefined from the parent
-  onEffectSelect: (device: WledDevice, effectId: string) => void;
+  virtual: Virtual;
+  selectedEffect: string;
+  onEffectSelect: (virtual: Virtual, effectId: string) => void;
 }
 
 export const EffectPicker = memo(({
-  device,
+  virtual,
   selectedEffect,
   onEffectSelect,
 }: EffectPickerProps) => {
@@ -24,10 +24,12 @@ export const EffectPicker = memo(({
       size='small'
       fullWidth
       value={value}
-      onChange={(e) => onEffectSelect(device, e.target.value)}
+      onChange={(e) => onEffectSelect(virtual, e.target.value)}
       displayEmpty
     >
-      <MenuItem value="" disabled><em>Choose Effect</em></MenuItem>
+      <MenuItem value="" disabled>
+        <em>Choose Effect</em>
+      </MenuItem>
       {availableEffects.map(effect => (
         <MenuItem key={effect.id} value={effect.id}>{effect.name}</MenuItem>
       ))}

@@ -13,17 +13,65 @@ async discoverWled(durationSecs: number | null) : Promise<Result<null, string>> 
     else return { status: "error", error: e  as any };
 }
 },
-async startEffect(ipAddress: string, ledCount: number, config: EffectConfig) : Promise<Result<null, string>> {
+async startEffect(virtualId: string, config: EffectConfig) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("start_effect", { ipAddress, ledCount, config }) };
+    return { status: "ok", data: await TAURI_INVOKE("start_effect", { virtualId, config }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async stopEffect(ipAddress: string) : Promise<Result<null, string>> {
+async stopEffect(virtualId: string) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("stop_effect", { ipAddress }) };
+    return { status: "ok", data: await TAURI_INVOKE("stop_effect", { virtualId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateEffectSettings(virtualId: string, settings: EffectConfig) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_effect_settings", { virtualId, settings }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async addVirtual(config: Virtual) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_virtual", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateVirtual(config: Virtual) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_virtual", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeVirtual(virtualId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_virtual", { virtualId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async addDevice(config: Device) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_device", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeDevice(deviceIp: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_device", { deviceIp }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -61,17 +109,17 @@ async getEffectSchema(effectId: string) : Promise<Result<EffectSetting[], string
     else return { status: "error", error: e  as any };
 }
 },
-async updateEffectSettings(ipAddress: string, settings: EffectConfig) : Promise<Result<null, string>> {
+async getAvailableEffects() : Promise<Result<EffectInfo[], string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("update_effect_settings", { ipAddress, settings }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_available_effects") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async getAvailableEffects() : Promise<Result<EffectInfo[], string>> {
+async getVirtuals() : Promise<Result<Virtual[], string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_available_effects") };
+    return { status: "ok", data: await TAURI_INVOKE("get_virtuals") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -135,13 +183,16 @@ export type BaseEffectConfig = { mirror: boolean; flip: boolean; blur: number; b
 export type BladePowerConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { decay: number; multiplier: number; frequency_range: string; gradient: string }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean
+export type Device = { ip_address: string; name: string; led_count: number }
 export type DspSettings = { smoothing_factor: number; agc_attack: number; agc_decay: number }
 export type EffectConfig = { type: "blade_power"; config: BladePowerConfig } | { type: "scan"; config: ScanConfig }
 export type EffectInfo = { id: string; name: string }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
 export type LedsInfo = { count: number }
 export type MapInfo = { id: number }
+export type MatrixCell = { device_id: string; pixel: number }
 export type ScanConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { speed: number; width: number; gradient: string }
+export type Virtual = { id: string; name: string; matrix_data: ((MatrixCell | null)[])[]; is_device?: string | null }
 export type WledDevice = { ip_address: string; port: number; name: string; version: string; leds: LedsInfo; udp_port: number; architecture: string; maps: MapInfo[] }
 
 /** tauri-specta globals **/
