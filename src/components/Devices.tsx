@@ -5,11 +5,10 @@ import { useStore } from "../store/useStore";
 import { Grid } from "@mui/material";
 import type { WledDevice, EffectConfig, EffectSetting, EffectInfo } from "../bindings";
 
-const buildConfigPayload = (effectId: string, settings: Record<string, any>, availableEffects: EffectInfo[]): EffectConfig | null => {
-    const effectInfo = availableEffects.find(e => e.id === effectId);
-    if (!effectInfo) return null;
+const buildConfigPayload = (effectId: string, settings: Record<string, any>): EffectConfig | null => {
+    if (!effectId || effectId === 'none') return null;
     return {
-      type: effectInfo.variant as any,
+      type: effectId,
       config: settings,
     } as EffectConfig;
 };
@@ -20,8 +19,7 @@ export function Devices() {
     activeEffects, setActiveEffects,
     selectedEffects, setSelectedEffects,
     effectSchemas, setEffectSchemas,
-    effectSettings, setEffectSettings,
-    availableEffects,
+    effectSettings, setEffectSettings
   } = useStore();
 
   const handleEffectSelection = useCallback(
@@ -71,32 +69,43 @@ export function Devices() {
       setEffectSettings(newSettings);
 
       if (activeEffects[ip]) {
-        const configPayload = buildConfigPayload(effectId, newSettingsForEffect, availableEffects);
+        const configPayload = buildConfigPayload(effectId, newSettingsForEffect);
         if (configPayload) {
             commands.updateEffectSettings(ip, configPayload).catch(console.error);
         }
       }
     },
-    [activeEffects, effectSettings, selectedEffects, availableEffects]
+    [activeEffects, effectSettings, selectedEffects]
   );
 
   const handleStartEffect = useCallback(
     async (device: WledDevice, effectIdOverride?: string, settingsOverride?: Record<string, any>) => {
+      console.log(`[FRONTEND LOG] 1. handleStartEffect called for ${device.ip_address}`);
       const effectId = effectIdOverride || selectedEffects[device.ip_address];
       const settings = settingsOverride || effectSettings[device.ip_address]?.[effectId];
-
-      if (!effectId || !settings) { return; }
       
-      const configPayload = buildConfigPayload(effectId, settings, availableEffects);
+      if (!effectId || !settings) {
+        console.error(`[FRONTEND LOG] ERROR: Missing effectId or settings. Cannot start.`);
+        return;
+      }
+      
+      const configPayload = buildConfigPayload(effectId, settings);
+      console.log('[FRONTEND LOG] 2. Built config payload:', JSON.stringify(configPayload, null, 2));
       
       if (configPayload) {
         try {
+          console.log('[FRONTEND LOG] 3. Calling backend command: commands.startEffect');
           await commands.startEffect(device.ip_address, device.leds.count, configPayload);
+          console.log('[FRONTEND LOG] 4. Backend command successful.');
           setActiveEffects({ ...activeEffects, [device.ip_address]: true });
-        } catch (err) { console.error("Failed to start effect:", err); }
+        } catch (err) {
+          console.error("[FRONTEND LOG] ERROR: Backend command 'startEffect' failed:", err);
+        }
+      } else {
+        console.error("[FRONTEND LOG] ERROR: configPayload was null. Cannot start.");
       }
     },
-    [activeEffects, selectedEffects, effectSettings, availableEffects]
+    [activeEffects, selectedEffects, effectSettings]
   );
 
   const handleStopEffect = useCallback(async (ip: string) => {

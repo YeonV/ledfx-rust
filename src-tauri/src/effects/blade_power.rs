@@ -99,6 +99,9 @@ impl Effect for BladePower {
             "High" => highs_power(&audio_data.melbanks),
             _ => lows_power(&audio_data.melbanks),
         };
+
+        
+        println!("[BLADE_POWER LOG] Rendering frame. Power: {:.4}, Multiplier: {}, Decay: {}", power, self.config.multiplier, self.config.decay);
         
         let bar_level = (power * self.config.multiplier * 2.0).min(1.0);
         let bar_idx = (bar_level * pixel_count as f32) as usize;
@@ -129,6 +132,7 @@ impl Effect for BladePower {
     fn update_config(&mut self, config: Value) {
         if let Ok(new_config) = serde_json::from_value(config) {
             self.config = new_config;
+            println!("[BLADE_POWER LOG] Config updated successfully. New multiplier: {}", self.config.multiplier);
             self.gradient_palette.clear();
         } else {
             eprintln!("Failed to deserialize settings for BladePower");

@@ -24,7 +24,7 @@ export const EffectPicker = memo(({
       value={selectedEffect}
       onChange={(e) => onEffectSelect(device, e.target.value)}
     >
-      <MenuItem value="none" disabled>Choose Effect</MenuItem>
+      <MenuItem value={undefined} disabled>Choose Effect</MenuItem>
       {availableEffects.map(effect => (
         <MenuItem key={effect.id} value={effect.id}>{effect.name}</MenuItem>
       ))}

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use super::EffectInfo;
 
-#[derive(Deserialize, Serialize, Type, Clone)]
+#[derive(Deserialize, Serialize, Type, Clone, Debug)]
 #[serde(tag = "type", content = "config")]
 pub enum EffectConfig {
     #[serde(rename = "blade_power")]
@@ -18,8 +18,8 @@ pub enum EffectConfig {
 #[specta::specta]
 pub fn get_available_effects() -> Result<Vec<EffectInfo>, String> {
     Ok(vec![
-        EffectInfo { id: "blade_power".to_string(), name: effects::blade_power::NAME.to_string(), variant: "BladePower".to_string() },
-        EffectInfo { id: "scan".to_string(), name: effects::scan::NAME.to_string(), variant: "Scan".to_string() },
+        EffectInfo { id: "blade_power".to_string(), name: effects::blade_power::NAME.to_string() },
+        EffectInfo { id: "scan".to_string(), name: effects::scan::NAME.to_string() },
     ])
 }
 
