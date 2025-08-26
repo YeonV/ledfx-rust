@@ -11,7 +11,7 @@ export function SettingsFab() {
 
   return (
     <>
-        <IconButton onClick={() => setOpenSettings(true)} sx={{ position: "fixed", top: 16, right: 16 }}>
+        <IconButton onClick={() => setOpenSettings(true)}>
           <SettingsIcon />
         </IconButton>
         <Drawer

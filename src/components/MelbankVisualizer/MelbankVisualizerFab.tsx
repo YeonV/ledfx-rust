@@ -1,5 +1,4 @@
 import { useStore } from "../../store/useStore";
-import { Settings } from "../Settings/Settings";
 import { Equalizer } from "@mui/icons-material";
 import { Drawer, IconButton } from "@mui/material";
 import MelbankVisualizer from "./MelbankVisualizer";
@@ -12,7 +11,7 @@ export function MelbankVisualizerFab() {
 
   return (
     <>
-        <IconButton onClick={() => setOpenMelbankVisualizer(true)} sx={{ position: "fixed", top: 16, right: 48 }}>
+        <IconButton onClick={() => setOpenMelbankVisualizer(true)}>
           <Equalizer />
         </IconButton>
         <Drawer

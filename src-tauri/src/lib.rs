@@ -36,7 +36,9 @@ fn configure_builder() -> Builder<tauri::Wry> {
             audio::set_audio_device,
             audio::get_audio_analysis,
             audio::get_dsp_settings,
-            audio::update_dsp_settings
+            audio::update_dsp_settings,
+            engine::get_playback_state,
+            engine::toggle_pause
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()

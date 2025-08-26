@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device } from '../bindings';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState } from '../bindings';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
@@ -34,6 +34,8 @@ interface IStore {
   setOpenMelbankVisualizer: (openMelbankVisualizer: boolean) => void;
   availableEffects: EffectInfo[];
   setAvailableEffects: (effects: EffectInfo[]) => void;
+  playbackState: PlaybackState;
+  setPlaybackState: (state: PlaybackState) => void;
 }
 
 export const useStore = create<IStore>((set) => ({
@@ -67,4 +69,6 @@ export const useStore = create<IStore>((set) => ({
   setOpenMelbankVisualizer: (openMelbankVisualizer) => set({ openMelbankVisualizer }),
   availableEffects: [],
   setAvailableEffects: (effects) => set({ availableEffects: effects }),
+  playbackState: { is_paused: false },
+  setPlaybackState: (state) => set({ playbackState: state }),
 }));

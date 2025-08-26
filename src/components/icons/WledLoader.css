@@ -1,0 +1,61 @@
+/*
+ * Keyframes for the seamless left-to-right wipe & chase effect.
+ * We animate a clip-path window across the element.
+ */
+@keyframes wipe-and-chase {
+  /* At the start, the foreground is fully clipped (hidden). */
+  0% {
+    clip-path: inset(0 100% 0 0);
+  }
+  5% {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  /* Phase 1: Reveal from left to right */
+  /* At the halfway point, the foreground is fully visible. */
+  45% {
+    clip-path: inset(0 0 0 0);
+  }
+  55% {
+    clip-path: inset(0 0 0 0);
+  }
+
+  /* Phase 2: Conceal from left to right */
+  /* At the end, the foreground is hidden again, but this time by
+     clipping from the left side, completing the seamless wipe. */
+  95% {
+    clip-path: inset(0 0 0 100%);
+  }
+  100% {
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+/* Base styles for our loader layers (no changes here) */
+.wled-loader-container {
+  transform: translateZ(0); 
+}
+
+/* The background layer is always visible but dimmed (no changes here) */
+.wled-loader-background {
+  fill: currentColor;
+  opacity: 0.2;
+}
+
+/* The foreground layer is what we animate */
+.wled-loader-foreground {
+  fill: currentColor;
+  
+  /* Apply the NEW animation */
+  animation-name: wipe-and-chase; /* <-- Use the new keyframes */
+  animation-duration: 2s;       /* A slightly longer duration feels smoother */
+  animation-iteration-count: infinite;
+  /* animation-timing-function: ease-in-out; */
+}
+
+.wled-loader-paused-overlay {
+  fill: currentColor;
+  opacity: 0; /* It's invisible by default */
+  /* Add a smooth fade for when the opacity is changed via inline styles */
+  transition: opacity 0.2s ease-in-out;
+}

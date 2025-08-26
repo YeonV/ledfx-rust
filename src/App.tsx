@@ -2,16 +2,16 @@ import { useEffect } from "react";
 import { WledDiscoverer } from "./components/WledDiscoverer";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
-import { SettingsFab } from "./components/Settings/SettingsFab";
-import { Virtuals as VirtualsComponent } from "./components/Virtuals";
-import { MelbankVisualizerFab } from "./components/MelbankVisualizer/MelbankVisualizerFab";
-import "./App.css";
-import { commands, type Virtual, type Device } from "./bindings";
+import { Virtuals } from "./components/Virtuals";
+import { commands, type Virtual, type Device, PlaybackState } from "./bindings";
 import { useStore } from "./store/useStore";
 import { AddButton } from "./components/AddButton";
+import { GlobalControls } from "./components/GlobalControls";
+import "./App.css";
+import { AppBar, Box, Toolbar, Typography } from "@mui/material";
 
 function App() {
-  const { setAvailableEffects, setVirtuals, setDevices } = useStore();
+  const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, devices, virtuals } = useStore();
 
   useEffect(() => {
     const fetchInitialState = async () => {
@@ -41,23 +41,36 @@ function App() {
       setDevices(event.payload);
     });
 
+    const unlistenPlayback = listen<PlaybackState>('playback-state-changed', (event) => {
+      setPlaybackState(event.payload);
+    });
+
     return () => {
-      Promise.all([unlistenFrames, unlistenVirtuals, unlistenDevices]).then(([uf, uv, ud]) => {
+      Promise.all([unlistenFrames, unlistenVirtuals, unlistenDevices, unlistenPlayback]).then(([uf, uv, ud, up]) => {
         uf();
         uv();
         ud();
+        up();
       });
     };
   }, [setAvailableEffects, setVirtuals, setDevices]);
 
-  return (
-    <main>
-      <WledDiscoverer />
-      <MelbankVisualizerFab />
-      <SettingsFab />
-      <VirtualsComponent />
-      <AddButton />
+  return (<>
+    <AppBar elevation={0} color="error" position="sticky">
+      <Toolbar color="error" sx={{ minHeight: '48px !important', justifyContent: 'space-between', px: '16px !important' }}>
+        <Box>
+          {devices.length > 0 && <WledDiscoverer variant='icon' />}
+          {devices.length > 0 && <AddButton />}
+        </Box>
+        <GlobalControls />
+      </Toolbar>
+    </AppBar>
+    <main style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', overflowY: 'auto' }}>
+      {virtuals.length > 0 && <Virtuals />}
+      {devices.length === 0 && <WledDiscoverer />}
+     
     </main>
+    </>
   );
 }
 

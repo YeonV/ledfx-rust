@@ -3,10 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import { commands } from "../bindings";
 import { useStore } from "../store/useStore";
 import { Wled } from "./Icons/Icons";
-import { Box, LinearProgress, Button, Alert } from "@mui/material";
+import { Box, LinearProgress, Button, Alert, IconButton } from "@mui/material";
 import type { WledDevice, Device } from "../bindings";
 
-export function WledDiscoverer() {
+export function WledDiscoverer({ variant = 'button' }: { variant?: string }) {
   const {
     isScanning, setIsScanning,
     error, setError,
@@ -62,23 +62,25 @@ export function WledDiscoverer() {
     }
   }, [duration, setIsScanning, setError]);
 
-  return (
-    <Box sx={{ width: "100%", p: 2 }}>
-      <Button
-        onClick={handleDiscover}
-        disabled={isScanning} // Use disabled prop for clarity
-        variant="contained"
-      >
-        <Wled />
-        <span style={{ marginLeft: 8 }}>{isScanning ? "Scanning..." : "Discover"}</span>
-      </Button>
-
-      {isScanning && <LinearProgress sx={{ mt: 2, mb: 2 }} />}
-      {error && (
-        <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
-          {error}
-        </Alert>
-      )}      
-    </Box>
+  return (<>
+    {variant === 'icon' && <IconButton onClick={handleDiscover} disabled={isScanning}>
+      <Wled width={20} scan={isScanning} />
+    </IconButton>}
+    {isScanning && variant === 'button' && <LinearProgress sx={{ mt: 2, mb: 2 }} />}
+    {error && (
+      <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+        {error}
+      </Alert>
+    )}
+    {variant === 'button' && <Box flexGrow={1} alignItems={'center'} justifyContent={'center'} display={'flex'} flexDirection={'column'}><Button
+      onClick={handleDiscover}
+      disabled={isScanning} // Use disabled prop for clarity
+      variant="contained"
+    >
+      <Wled />
+      <span style={{ marginLeft: 8 }}>{isScanning ? "Scanning..." : "Discover"}</span>
+    </Button>
+    </Box>}
+  </>
   );
 }

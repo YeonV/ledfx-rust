@@ -172,6 +172,22 @@ async updateDspSettings(newSettings: DspSettings) : Promise<Result<null, string>
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async getPlaybackState() : Promise<Result<PlaybackState, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_playback_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async togglePause() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_pause") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -199,6 +215,7 @@ export type EffectSetting = { id: string; name: string; description: string; con
 export type LedsInfo = { count: number }
 export type MapInfo = { id: number }
 export type MatrixCell = { device_id: string; pixel: number }
+export type PlaybackState = { is_paused: boolean }
 export type ScanConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { speed: number; width: number; gradient: string }
 export type Virtual = { id: string; name: string; matrix_data: ((MatrixCell | null)[])[]; is_device?: string | null }
 export type WledDevice = { ip_address: string; port: number; name: string; version: string; leds: LedsInfo; udp_port: number; architecture: string; maps: MapInfo[] }

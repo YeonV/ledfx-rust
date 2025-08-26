@@ -3,8 +3,8 @@ import { InfoLine } from './Infoline';
 import { EffectPicker } from './EffectPicker';
 import { EffectPreview } from './EffectPreview';
 import { EffectSettings } from './EffectSettings';
-import { Accordion, AccordionDetails, AccordionSummary, Card, CardContent, CardHeader, IconButton, Stack, Tooltip, Typography } from '@mui/material';
-import { ArrowDropDown, Lightbulb as LightbulbIcon, PlayArrow as PlayArrowIcon, Stop as StopIcon, Edit as EditIcon} from '@mui/icons-material';
+import { Accordion, AccordionDetails, AccordionSummary, Box, Button, Card, CardContent, CardHeader, Collapse, IconButton, Stack, ToggleButton, Tooltip, Typography } from '@mui/material';
+import { ArrowDropDown, Lightbulb as LightbulbIcon, PlayArrow as PlayArrowIcon, Stop as StopIcon, Edit as EditIcon, Tune} from '@mui/icons-material';
 import { type EffectSetting, type Virtual } from '../../bindings';
 import { EditVirtualDialog } from '../EditVirtualDialog';
 
@@ -32,6 +32,7 @@ export const VirtualCard = memo(({
   onSettingChange,
 }: VirtualCardProps) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [openEffectSettings, setOpenEffectSettings] = useState(false);
   const pixelCount = virtual.matrix_data?.flat()?.filter(Boolean)?.length || 0;
 
   return (
@@ -68,15 +69,17 @@ export const VirtualCard = memo(({
       />
       <CardContent sx={{ p: '8px', pb: '8px !important' }}>
         <EffectPreview virtualId={virtual.id} active={isActive} />
-        <EffectPicker virtual={virtual} selectedEffect={selectedEffect} onEffectSelect={onEffectSelect} />
-        {schema && settings && <Accordion elevation={0} sx={{ mt: 1.5, border: '1px solid #444', borderRadius: '4px', overflow: 'hidden', minHeight: 40 }}>
-          <AccordionSummary expandIcon={<ArrowDropDown />} sx={{ pr: 0.8}}>
-            <Typography>Effect Settings</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
+        <Stack direction={'row'} alignItems="center">
+          <EffectPicker virtual={virtual} selectedEffect={selectedEffect} onEffectSelect={onEffectSelect} />
+          <Button disabled={!settings} variant='outlined' sx={{ mt: '12px', minWidth: 40, p: 0, height: 40, borderColor: '#444', color: 'text.primary' }} size='large' onClick={() => {setOpenEffectSettings(!openEffectSettings)}}>
+              <Tune />
+          </Button>
+        </Stack>
+        {schema && settings && <Collapse in={openEffectSettings} sx={{ mt: settings && openEffectSettings ? 1.5 : 0, border: '1px solid #444', borderRadius: '4px', overflow: 'hidden', minHeight: 1 }}>
+          <Box px={2}>
             <EffectSettings schema={schema} settings={settings} onSettingChange={onSettingChange} />
-          </AccordionDetails>
-        </Accordion>}
+          </Box>
+        </Collapse>}
       </CardContent>
     </Card>
     <EditVirtualDialog

@@ -12,8 +12,8 @@
   "app": {
     "windows": [
       {
-        "title": "ledfx-rust",
-        "width": 800,
+        "title": "LedFx | by Blade",
+        "width": 768,
         "height": 600
       }
     ],
