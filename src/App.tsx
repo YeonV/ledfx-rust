@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { WledDiscoverer } from "./components/WledDiscoverer";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
@@ -7,8 +7,8 @@ import { commands, type Virtual, type Device, PlaybackState } from "./bindings";
 import { useStore } from "./store/useStore";
 import { AddButton } from "./components/AddButton";
 import { GlobalControls } from "./components/GlobalControls";
+import { AppBar, Box, Toolbar } from "@mui/material";
 import "./App.css";
-import { AppBar, Box, Toolbar, Typography } from "@mui/material";
 
 function App() {
   const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, devices, virtuals } = useStore();

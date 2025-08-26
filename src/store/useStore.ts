@@ -72,3 +72,5 @@ export const useStore = create<IStore>((set) => ({
   playbackState: { is_paused: false },
   setPlaybackState: (state) => set({ playbackState: state }),
 }));
+
+(window as any).yz = useStore.getState();

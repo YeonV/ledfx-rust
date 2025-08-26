@@ -5,6 +5,9 @@
 
 
 export const commands = {
+async isDev() : Promise<boolean> {
+    return await TAURI_INVOKE("is_dev");
+},
 async discoverWled(durationSecs: number | null) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("discover_wled", { durationSecs }) };

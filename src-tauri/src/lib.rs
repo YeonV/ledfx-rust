@@ -13,9 +13,16 @@ use std::thread;
 use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
+#[tauri::command]
+#[specta::specta]
+fn is_dev() -> bool {
+    cfg!(debug_assertions)
+}
+
 fn configure_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
+            is_dev,
             wled::discover_wled,
             engine::start_effect,
             engine::stop_effect,
@@ -68,10 +75,6 @@ pub fn run() {
     let audio_data_clone_for_thread = audio_data.0.clone();
     let dsp_settings_clone_for_thread = dsp_settings.0.clone();
 
-    // --- START: THE FINAL, CORRECT BUILDER PATTERN ---
-    
-    // In debug mode, create a builder SOLELY for exporting.
-    // This builder is created, used for the export, and then immediately discarded.
     #[cfg(debug_assertions)]
     {
         configure_builder()
@@ -81,8 +84,6 @@ pub fn run() {
 
     let builder = configure_builder();
     
-    // --- END: THE FINAL, CORRECT BUILDER PATTERN ---
-
     let mut tauri_builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
