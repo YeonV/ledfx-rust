@@ -105,7 +105,7 @@ const GradientPicker = ({
         <div
           className={`${classes.paper} gradient-picker ${showHex ? 'show_hex' : ''}`}
           style={{
-            padding: theme.spacing(1),
+            padding: 8,
             backgroundColor: theme.palette.background.paper
             // '& .popup_tabs-header-label-active': {
             //   color: theme.palette.text.primary,
