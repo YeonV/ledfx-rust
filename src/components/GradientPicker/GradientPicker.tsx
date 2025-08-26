@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Popper from '@mui/material/Popper'
 import ReactGPicker from 'react-gcolor-picker'
-import { TextField, Button, useTheme } from '@mui/material'
+import { TextField, Button, useTheme, Typography } from '@mui/material'
 import { Add } from '@mui/icons-material'
 import useClickOutside from '../../utils/useClickOutside'
 import Popover from '../Popover/Popover'
@@ -75,6 +75,7 @@ const GradientPicker = ({
       style={{
         borderColor: theme.palette.divider,
         minWidth: 'unset',
+        flexBasis: '49%',
         ...(wrapperStyle as any)
       }}
       // style={{
@@ -84,10 +85,9 @@ const GradientPicker = ({
       //   },
       // }}
     >
-      <label className="MuiFormLabel-root" style={{ background: theme.palette.background.paper }}>
+      <Typography variant='caption' className="MuiFormLabel-root" style={{ background: theme.palette.background.paper }}>
         {title && title.replace(/_/g, ' ').replace(/background/g, 'bg').replace(/name/g, '')}
-      </label>
-      {}
+      </Typography>
       <div
         className={classes.picker}
         style={{ background: pickerBgColorInt }}

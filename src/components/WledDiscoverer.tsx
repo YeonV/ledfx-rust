@@ -6,10 +6,10 @@ import { Wled } from "./Icons/Icons";
 import { Box, LinearProgress, Button, Alert, IconButton } from "@mui/material";
 import type { WledDevice, Device } from "../bindings";
 
-export function WledDiscoverer({ variant = 'button' }: { variant?: string }) {
+export function WledDiscoverer() {
   const {
     isScanning, setIsScanning,
-    error, setError,
+    setError,
     duration,
     setAudioDevices,
     setSelectedAudioDevice,
@@ -62,25 +62,9 @@ export function WledDiscoverer({ variant = 'button' }: { variant?: string }) {
     }
   }, [duration, setIsScanning, setError]);
 
-  return (<>
-    {variant === 'icon' && <IconButton onClick={handleDiscover} disabled={isScanning}>
+  return (
+   <IconButton onClick={handleDiscover} disabled={isScanning}>
       <Wled width={20} scan={isScanning} />
-    </IconButton>}
-    {isScanning && variant === 'button' && <LinearProgress sx={{ mt: 2, mb: 2 }} />}
-    {error && (
-      <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
-        {error}
-      </Alert>
-    )}
-    {variant === 'button' && <Box flexGrow={1} alignItems={'center'} justifyContent={'center'} display={'flex'} flexDirection={'column'}><Button
-      onClick={handleDiscover}
-      disabled={isScanning} // Use disabled prop for clarity
-      variant="contained"
-    >
-      <Wled />
-      <span style={{ marginLeft: 8 }}>{isScanning ? "Scanning..." : "Discover"}</span>
-    </Button>
-    </Box>}
-  </>
+    </IconButton>
   );
 }

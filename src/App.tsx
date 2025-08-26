@@ -7,11 +7,11 @@ import { commands, type Virtual, type Device, PlaybackState } from "./bindings";
 import { useStore } from "./store/useStore";
 import { AddButton } from "./components/AddButton";
 import { GlobalControls } from "./components/GlobalControls";
-import { AppBar, Box, Toolbar } from "@mui/material";
+import { Alert, AppBar, Box, Toolbar } from "@mui/material";
 import "./App.css";
 
 function App() {
-  const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, devices, virtuals } = useStore();
+  const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, devices, virtuals, error } = useStore();
 
   useEffect(() => {
     const fetchInitialState = async () => {
@@ -59,16 +59,19 @@ function App() {
     <AppBar elevation={0} color="error" position="sticky">
       <Toolbar color="error" sx={{ minHeight: '48px !important', justifyContent: 'space-between', px: '16px !important' }}>
         <Box>
-          {devices.length > 0 && <WledDiscoverer variant='icon' />}
+          <WledDiscoverer/>
           {devices.length > 0 && <AddButton />}
         </Box>
         <GlobalControls />
       </Toolbar>
     </AppBar>
+    {error && (
+      <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+        {error}
+      </Alert>
+    )}
     <main style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', overflowY: 'auto' }}>
-      {virtuals.length > 0 && <Virtuals />}
-      {devices.length === 0 && <WledDiscoverer />}
-     
+      {virtuals.length > 0 && <Virtuals />}     
     </main>
     </>
   );

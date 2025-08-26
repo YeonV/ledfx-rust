@@ -70,7 +70,7 @@ export const Root = styled('div')(() => ({
   },
   [`& .${classes.picker}`]: {
     height: '30px',
-    margin: '15px 10px 10px 10px',
+    margin: '2px 0px 0px 0px',
     borderRadius: '10px',
     cursor: 'pointer',
     border: '1px solid #fff'
