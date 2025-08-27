@@ -37,7 +37,7 @@ export function Settings() {
     targetFps, setTargetFps,
     audioDevices,
     selectedAudioDevice, setSelectedAudioDevice,
-    engineMode, setEngineMode, setOpenSettings
+    setOpenSettings
   } = useStore();
 
     const handleAudioDeviceChange = (event: SelectChangeEvent<string>) => {

@@ -1,18 +1,16 @@
-import { useEffect, useState } from "react";
-import { WledDiscoverer } from "./components/WledDiscoverer";
+import { useEffect } from "react";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
 import { Virtuals } from "./components/Virtuals";
 import { commands, type Virtual, type Device, PlaybackState } from "./bindings";
 import { useStore } from "./store/useStore";
-import { AddButton } from "./components/AddButton";
-import { GlobalControls } from "./components/GlobalControls";
-import { Alert, AppBar, Box, Toolbar } from "@mui/material";
-import "./App.css";
+import { Alert } from "@mui/material";
 import { ConfigProvider } from "./components/ConfigProvider";
+import TopBar from "./components/TopBar/TopBar";
+import "./App.css";
 
 function App() {
-  const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, devices, virtuals, error } = useStore();
+  const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, virtuals, error } = useStore();
 
   useEffect(() => {
     const fetchInitialState = async () => {
@@ -59,23 +57,14 @@ function App() {
   return (
   
     <ConfigProvider>
-    <AppBar elevation={0} color="error" position="sticky">
-      <Toolbar color="error" sx={{ minHeight: '48px !important', justifyContent: 'space-between', px: '16px !important' }}>
-        <Box>
-          <WledDiscoverer/>
-          {devices.length > 0 && <AddButton />}
-        </Box>
-        <GlobalControls />
-      </Toolbar>
-    </AppBar>
-    {error && (
-      <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
-        {error}
-      </Alert>
-    )}
-    <main style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', overflowY: 'auto' }}>
-      {virtuals.length > 0 && <Virtuals />}     
-    </main>
+      
+      <TopBar/>
+      
+      {error && (<Alert severity="error" sx={{ mt: 2, mb: 2 }}>{error}</Alert>)}
+
+      <main style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', overflowY: 'auto' }}>
+        {virtuals.length > 0 && <Virtuals />}     
+      </main>
     </ConfigProvider>
   );
 }

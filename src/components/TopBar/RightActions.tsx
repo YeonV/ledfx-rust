@@ -1,16 +1,16 @@
-import { Box, IconButton } from '@mui/material';
+import { Box } from '@mui/material';
 import { PlayArrow, Pause } from '@mui/icons-material';
-import { useStore } from '../store/useStore';
-import { commands } from '../bindings';
-import { SettingsFab } from './Settings/SettingsFab';
-import { MelbankVisualizerFab } from './MelbankVisualizer/MelbankVisualizerFab';
-import DevTools from './DevTools';
-import { checkEnvironment, isDev } from '../utils/environment';
+import { useStore } from '../../store/useStore';
+import { commands } from '../../bindings';
+import { SettingsFab } from '../Settings/SettingsFab';
+import { MelbankVisualizerFab } from '../MelbankVisualizer/MelbankVisualizerFab';
+import { checkEnvironment, isDev } from '../../utils/environment';
 import { useEffect } from 'react';
-import { ImportExportButtons } from './ImportExportButtons';
-import IconBtn from './IconBtn';
+import { SettingsActions } from '../SettingsActions';
+import { IconBtn } from '../IconBtn';
+import DevTools from '../DevTools';
 
-export const GlobalControls = () => {
+export const RightActions = () => {
   const { playbackState } = useStore();
 
   const handleTogglePause = () => {
@@ -23,9 +23,8 @@ export const GlobalControls = () => {
 
   return (
     <Box>
-      
       {isDev() && <DevTools />}
-      <ImportExportButtons />
+      <SettingsActions />
       <IconBtn icon={playbackState.is_paused ? <PlayArrow /> : <Pause />} text={playbackState.is_paused ? "Play" : "Pause"} onClick={handleTogglePause} />
       <MelbankVisualizerFab />
       <SettingsFab />

@@ -1,8 +1,8 @@
 import { useStore } from "../../store/useStore";
 import { Equalizer } from "@mui/icons-material";
 import { Drawer } from "@mui/material";
+import { IconBtn } from "../IconBtn";
 import MelbankVisualizer from "./MelbankVisualizer";
-import IconBtn from "../IconBtn";
 
 /**
  * Floating action button for opening the settings drawer.

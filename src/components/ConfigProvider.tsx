@@ -37,6 +37,7 @@ export const ConfigProvider = ({ children }: { children: ReactNode }) => {
   }, [setError]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
+    console.log('File dropped');
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file && file.type === 'application/json') {

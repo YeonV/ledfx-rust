@@ -1,4 +1,4 @@
-use crate::audio::SharedAudioData;
+use crate::audio::{DspSettings, SharedAudioData};
 use crate::effects::Effect;
 use crate::store;
 use crate::types::{Device, MatrixCell, Virtual};
@@ -15,6 +15,9 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 mod generated;
 pub use generated::*;
+
+// Add this import if EngineState is defined in store.rs
+use crate::store::EngineState;
 
 struct ActiveVirtual {
     effect: Option<Box<dyn Effect>>,
@@ -40,6 +43,7 @@ pub struct EngineStateTx(pub Sender<EngineRequest>);
 pub enum EngineRequest {
     GetVirtuals(Sender<Vec<Virtual>>),
     GetDevices(Sender<Vec<Device>>),
+    GetDspSettings(Sender<DspSettings>),
     GetPlaybackState(Sender<PlaybackState>),
 }
 
@@ -84,6 +88,17 @@ pub enum EngineCommand {
 }
 
 pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);
+
+fn emit_full_state_update(
+    engine_state: &EngineState,
+    app_handle: &AppHandle,
+) {
+    let virtual_configs: Vec<Virtual> = engine_state.virtuals.values().cloned().collect();
+    app_handle.emit("virtuals-changed", &virtual_configs).unwrap();
+    let device_list: Vec<Device> = engine_state.devices.values().cloned().collect();
+    app_handle.emit("devices-changed", &device_list).unwrap();
+    app_handle.emit("dsp-settings-changed", &engine_state.dsp_settings).unwrap();
+}
 
 fn emit_virtuals_update(virtuals: &HashMap<String, ActiveVirtual>, app_handle: &AppHandle) {
     let virtual_configs: Vec<Virtual> = virtuals.values().map(|v| v.config.clone()).collect();
@@ -154,6 +169,9 @@ pub fn run_effect_engine(
                 }
                 EngineRequest::GetPlaybackState(responder) => {
                     responder.send(PlaybackState { is_paused }).unwrap();
+                }
+                EngineRequest::GetDspSettings(responder) => {
+                    responder.send(engine_state.dsp_settings.clone()).unwrap();
                 }
             }
         }
@@ -325,7 +343,8 @@ pub fn run_effect_engine(
                 .map(|(id, v)| (id.clone(), v.config.clone()))
                 .collect();
             store::save_engine_state(&app_handle, &engine_state);
-            emit_virtuals_update(&virtuals, &app_handle);
+            // emit_virtuals_update(&virtuals, &app_handle);
+            emit_full_state_update(&engine_state, &app_handle);
         }
 
         if !is_paused {

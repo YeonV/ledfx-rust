@@ -1,5 +1,5 @@
 import { useStore } from "../../store/useStore";
-import IconBtn from "../IconBtn";
+import { IconBtn } from "../IconBtn";
 import { Settings } from "../Settings/Settings";
 import { Settings as SettingsIcon } from "@mui/icons-material";
 import { Drawer } from "@mui/material";

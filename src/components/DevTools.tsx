@@ -2,9 +2,9 @@
 import { useState, useMemo, useRef, useEffect, MouseEvent } from 'react';
 import { Paper, Box, Typography, TextField, InputAdornment, IconButton } from '@mui/material';
 import { Search, Clear, DragIndicator, BugReport } from '@mui/icons-material';
-import JsonTreeView from './JsonTreeView';
 import { useStore } from '../store/useStore';
-import IconBtn from './IconBtn';
+import { IconBtn } from './IconBtn';
+import JsonTreeView from './JsonTreeView';
 
 
 // A recursive function to filter the state object based on the search term

@@ -3,9 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { commands } from "../bindings";
 import { useStore } from "../store/useStore";
 import { Wled } from "./Icons/Icons";
-import { Box, LinearProgress, Button, Alert, IconButton } from "@mui/material";
+import { IconBtn } from "./IconBtn";
 import type { WledDevice, Device } from "../bindings";
-import IconBtn from "./IconBtn";
 
 export function WledDiscoverer() {
   const {
@@ -46,16 +45,14 @@ export function WledDiscoverer() {
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [setAudioDevices, setSelectedAudioDevice, setError]); // Dependencies updated
+  }, [setAudioDevices, setSelectedAudioDevice, setError]);
 
   const handleDiscover = useCallback(async () => {
     setIsScanning(true);
     setError(null);
-    // We no longer manage a list of devices in the frontend store,
-    // so we don't need to clear it here.
+    
     try {
       await commands.discoverWled(duration);
-      // The timeout is still useful to automatically stop the "Scanning..." state.
       setTimeout(() => setIsScanning(false), duration * 1000);
     } catch (err) {
       setError(err as string);

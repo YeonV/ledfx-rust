@@ -1,9 +1,10 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState } from '../bindings';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
-interface IStore {
+type IStore = {
   devices: Device[];
   setDevices: (devices: Device[]) => void;
   virtuals: Virtual[];
@@ -38,39 +39,48 @@ interface IStore {
   setPlaybackState: (state: PlaybackState) => void;
 }
 
-export const useStore = create<IStore>((set) => ({
-  devices: [],
-  setDevices: (devices) => set({ devices }),
-  virtuals: [],
-  setVirtuals: (virtuals) => set({ virtuals }),
-  isScanning: false,
-  setIsScanning: (isScanning) => set({ isScanning }),
-  error: null,
-  setError: (error) => set({ error }),
-  duration: 5,
-  setDuration: (duration) => set({ duration }),
-  activeEffects: {},
-  setActiveEffects: (activeEffects) => set({ activeEffects }),
-  selectedEffects: {},
-  setSelectedEffects: (selectedEffects) => set({ selectedEffects }),
-  targetFps: 60,
-  setTargetFps: (targetFps) => set({ targetFps }),
-  audioDevices: [],
-  setAudioDevices: (audioDevices) => set({ audioDevices }),
-  selectedAudioDevice: "",
-  setSelectedAudioDevice: (selectedAudioDevice) => set({ selectedAudioDevice }),
-  effectSchemas: {},
-  setEffectSchemas: (effectSchemas) => set({ effectSchemas }),
-  effectSettings: {},
-  setEffectSettings: (effectSettings) => set({ effectSettings }),
-  openSettings: false,
-  setOpenSettings: (openSettings) => set({ openSettings }),
-  openMelbankVisualizer: false,
-  setOpenMelbankVisualizer: (openMelbankVisualizer) => set({ openMelbankVisualizer }),
-  availableEffects: [],
-  setAvailableEffects: (effects) => set({ availableEffects: effects }),
-  playbackState: { is_paused: false },
-  setPlaybackState: (state) => set({ playbackState: state }),
-}));
-
-(window as any).yz = useStore.getState();
+export const useStore = create<IStore>()(
+  persist(
+    (set) => ({
+      devices: [],
+      setDevices: (devices) => set({ devices }),
+      virtuals: [],
+      setVirtuals: (virtuals) => set({ virtuals }),
+      isScanning: false,
+      setIsScanning: (isScanning) => set({ isScanning }),
+      error: null,
+      setError: (error) => set({ error }),
+      duration: 5,
+      setDuration: (duration) => set({ duration }),
+      activeEffects: {},
+      setActiveEffects: (activeEffects) => set({ activeEffects }),
+      selectedEffects: {},
+      setSelectedEffects: (selectedEffects) => set({ selectedEffects }),
+      targetFps: 60,
+      setTargetFps: (targetFps) => set({ targetFps }),
+      audioDevices: [],
+      setAudioDevices: (audioDevices) => set({ audioDevices }),
+      selectedAudioDevice: "",
+      setSelectedAudioDevice: (selectedAudioDevice) => set({ selectedAudioDevice }),
+      effectSchemas: {},
+      setEffectSchemas: (effectSchemas) => set({ effectSchemas }),
+      effectSettings: {},
+      setEffectSettings: (effectSettings) => set({ effectSettings }),
+      openSettings: false,
+      setOpenSettings: (openSettings) => set({ openSettings }),
+      openMelbankVisualizer: false,
+      setOpenMelbankVisualizer: (openMelbankVisualizer) => set({ openMelbankVisualizer }),
+      availableEffects: [],
+      setAvailableEffects: (effects) => set({ availableEffects: effects }),
+      playbackState: { is_paused: false },
+      setPlaybackState: (state) => set({ playbackState: state }),
+    }),
+    {
+      name: 'ledfx-store',
+      partialize: (state) =>
+        Object.fromEntries(
+          Object.entries(state).filter(([key]) => ['selectedAudioDevice'].includes(key))
+        ),
+    },
+  )
+);
