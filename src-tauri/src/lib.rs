@@ -33,8 +33,6 @@ fn configure_builder() -> Builder<tauri::Wry> {
             engine::remove_virtual,
             engine::add_device,
             engine::remove_device,
-            engine::subscribe_to_frames,
-            engine::unsubscribe_from_frames,
             engine::set_target_fps,
             engine::get_effect_schema,
             engine::get_available_effects,
@@ -44,12 +42,12 @@ fn configure_builder() -> Builder<tauri::Wry> {
             audio::set_audio_device,
             audio::get_audio_analysis,
             audio::get_dsp_settings,
-            audio::update_dsp_settings,
             engine::get_playback_state,
             engine::toggle_pause,
             store::export_settings,
             store::import_settings,
-            engine::trigger_reload
+            engine::trigger_reload,
+            engine::update_dsp_settings,
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()
@@ -79,6 +77,7 @@ pub fn run() {
 
     let audio_data_clone_for_thread = audio_data.0.clone();
     let dsp_settings_clone_for_thread = dsp_settings.0.clone();
+    let audio_command_tx_for_engine = audio_command_tx.clone();
 
     #[cfg(debug_assertions)]
     {
@@ -113,6 +112,7 @@ pub fn run() {
                 engine_command_rx,
                 engine_state_rx,
                 audio_data_state,
+                audio_command_tx_for_engine, 
                 engine_handle,
             );
         });

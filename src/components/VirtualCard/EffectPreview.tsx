@@ -13,25 +13,6 @@ export function EffectPreview({ virtualId, active }: EffectPreviewProps) {
   const frame = useFrameStore((state) => state.frames[virtualId]);
 
   useEffect(() => {
-    // The engine now sends preview frames for virtuals, but DDP packets to IPs.
-    // Subscriptions are still per-device for network efficiency.
-    // We need a way to map virtualId back to the device IPs it uses.
-    // For now, we will assume a simple mapping for device-virtuals.
-    // TODO: A more robust solution will be needed for multi-device virtuals.
-    const ipAddress = virtualId.startsWith('device_') ? virtualId.replace('device_', '') : null;
-
-    if (ipAddress) {
-      commands.subscribeToFrames(ipAddress);
-    }
-    
-    return () => {
-      if (ipAddress) {
-        commands.unsubscribeFromFrames(ipAddress);
-      }
-    };
-  }, [virtualId]);
-
-  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');

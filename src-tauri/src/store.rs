@@ -1,7 +1,7 @@
 use crate::audio::DspSettings;
+use crate::effects::schema::DefaultValue;
 use crate::types::{Device, Virtual};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -16,25 +16,10 @@ pub struct EngineState {
     #[serde(default)]
     pub selected_effects: HashMap<String, String>,
     #[serde(default)]
-    pub effect_settings: HashMap<String, HashMap<String, Value>>,
+    pub effect_settings: HashMap<String, HashMap<String, DefaultValue>>,
     #[serde(default)]
     pub dsp_settings: DspSettings,
 }
-
-
-// pub fn load_full_state(app_handle: &AppHandle) -> FullState {
-//     fs::read_to_string(get_settings_path(app_handle))
-//         .ok()
-//         .and_then(|content| serde_json::from_str(&content).ok())
-//         .unwrap_or_default()
-// }
-
-// pub fn save_full_state(app_handle: &AppHandle, state: &FullState) {
-//     let path = get_settings_path(app_handle);
-//     let json_string = serde_json::to_string_pretty(state).unwrap();
-//     fs::write(path, json_string).expect("Failed to write to settings file");
-// }
-
 
 fn get_settings_path(app_handle: &AppHandle) -> PathBuf {
     let path = app_handle.path().app_data_dir().unwrap();
@@ -59,8 +44,8 @@ pub fn save_engine_state(app_handle: &AppHandle, engine_state: &EngineState) {
 #[tauri::command]
 #[specta::specta]
 pub fn export_settings(app_handle: AppHandle) -> Result<String, String> {
-    let path = get_settings_path(&app_handle);
-    fs::read_to_string(path).map_err(|e| e.to_string())
+    let state = load_engine_state(&app_handle);
+    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

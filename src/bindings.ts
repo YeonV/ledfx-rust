@@ -80,22 +80,6 @@ async removeDevice(deviceIp: string) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async subscribeToFrames(ipAddress: string) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("subscribe_to_frames", { ipAddress }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async unsubscribeFromFrames(ipAddress: string) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("unsubscribe_from_frames", { ipAddress }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async setTargetFps(fps: number) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("set_target_fps", { fps }) };
@@ -168,14 +152,6 @@ async getDspSettings() : Promise<Result<DspSettings, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async updateDspSettings(newSettings: DspSettings) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("update_dsp_settings", { newSettings }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async getPlaybackState() : Promise<Result<PlaybackState, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_playback_state") };
@@ -211,6 +187,14 @@ async importSettings(data: string) : Promise<Result<null, string>> {
 async triggerReload() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("trigger_reload") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateDspSettings(settings: DspSettings) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_dsp_settings", { settings }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

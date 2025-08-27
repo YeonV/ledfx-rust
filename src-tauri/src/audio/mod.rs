@@ -98,6 +98,7 @@ pub mod devices;
 
 pub enum AudioCommand {
     ChangeDevice(String),
+    UpdateSettings(DspSettings),
 }
 
 pub fn start_audio_capture(
@@ -118,17 +119,6 @@ pub fn start_audio_capture(
 pub fn get_dsp_settings(settings: State<SharedDspSettings>) -> Result<DspSettings, String> {
     let data = settings.0.lock().map_err(|e| e.to_string())?;
     Ok(data.clone())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn update_dsp_settings(
-    new_settings: DspSettings,
-    settings: State<SharedDspSettings>,
-) -> Result<(), String> {
-    let mut data = settings.0.lock().map_err(|e| e.to_string())?;
-    *data = new_settings;
-    Ok(())
 }
 
 #[tauri::command]

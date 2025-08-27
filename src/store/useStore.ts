@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState } from '../bindings';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings  } from '../bindings';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
@@ -37,6 +37,8 @@ type IStore = {
   setAvailableEffects: (effects: EffectInfo[]) => void;
   playbackState: PlaybackState;
   setPlaybackState: (state: PlaybackState) => void;
+  dspSettings: DspSettings | null;
+  setDspSettings: (settings: DspSettings) => void;
 }
 
 export const useStore = create<IStore>()(
@@ -74,6 +76,8 @@ export const useStore = create<IStore>()(
       setAvailableEffects: (effects) => set({ availableEffects: effects }),
       playbackState: { is_paused: false },
       setPlaybackState: (state) => set({ playbackState: state }),
+      dspSettings: null,
+      setDspSettings: (settings) => set({ dspSettings: settings }),
     }),
     {
       name: 'ledfx-store',

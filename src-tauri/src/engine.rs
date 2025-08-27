@@ -4,11 +4,8 @@ use crate::store;
 use crate::types::{Device, MatrixCell, Virtual};
 use crate::utils::{colors, ddp, dsp};
 use serde::Serialize;
-use serde_json::Value;
 use specta::Type;
-#[cfg(debug_assertions)]
-use std::collections::hash_map;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::net::UdpSocket;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -18,7 +15,7 @@ mod generated;
 pub use generated::*;
 
 // Add this import if EngineState is defined in store.rs
-use crate::store::EngineState;
+// use crate::store::EngineState;
 
 struct ActiveVirtual {
     effect: Option<Box<dyn Effect>>,
@@ -75,31 +72,15 @@ pub enum EngineCommand {
     RemoveDevice {
         device_ip: String,
     },
-    Subscribe {
-        ip_address: String,
-    },
-    Unsubscribe {
-        ip_address: String,
-    },
     SetTargetFps {
         fps: u32,
     },
+    UpdateDspSettings { settings: DspSettings },
     TogglePause,
     ReloadState,
 }
 
 pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);
-
-fn emit_full_state_update(
-    engine_state: &EngineState,
-    app_handle: &AppHandle,
-) {
-    let virtual_configs: Vec<Virtual> = engine_state.virtuals.values().cloned().collect();
-    app_handle.emit("virtuals-changed", &virtual_configs).unwrap();
-    let device_list: Vec<Device> = engine_state.devices.values().cloned().collect();
-    app_handle.emit("devices-changed", &device_list).unwrap();
-    app_handle.emit("dsp-settings-changed", &engine_state.dsp_settings).unwrap();
-}
 
 fn emit_virtuals_update(virtuals: &HashMap<String, ActiveVirtual>, app_handle: &AppHandle) {
     let virtual_configs: Vec<Virtual> = virtuals.values().map(|v| v.config.clone()).collect();
@@ -122,6 +103,7 @@ pub fn run_effect_engine(
     command_rx: mpsc::Receiver<EngineCommand>,
     request_rx: Receiver<EngineRequest>,
     audio_data: State<SharedAudioData>,
+    audio_command_tx: mpsc::Sender<crate::audio::AudioCommand>,
     app_handle: AppHandle,
 ) {
     let mut engine_state = store::load_engine_state(&app_handle);
@@ -149,7 +131,6 @@ pub fn run_effect_engine(
         })
         .collect();
     let mut devices = engine_state.devices;
-    let mut subscribed_ips: HashSet<String> = HashSet::new();
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     let mut frame_count: u8 = 0;
     let mut target_frame_duration = Duration::from_millis(1000 / 60);
@@ -180,6 +161,15 @@ pub fn run_effect_engine(
         let mut state_changed = false;
         while let Ok(command) = command_rx.try_recv() {
             match command {
+                EngineCommand::UpdateDspSettings { settings } => {
+                    println!("[ENGINE] Updating DSP settings.");
+                    engine_state.dsp_settings = settings.clone();
+                    // Forward the command to the audio thread to apply settings
+                    audio_command_tx.send(crate::audio::AudioCommand::UpdateSettings(settings.clone())).unwrap();
+                    // Emit the event to the frontend
+                    app_handle.emit("dsp-settings-changed", &settings).unwrap();
+                    state_changed = true;
+                }
                 EngineCommand::ReloadState => {
                     println!("[ENGINE] Reloading state from disk.");
                     engine_state = store::load_engine_state(&app_handle);
@@ -209,6 +199,8 @@ pub fn run_effect_engine(
                     devices = engine_state.devices;
                     state_changed = true;
                     emit_devices_update(&devices, &app_handle);
+                    emit_virtuals_update(&virtuals, &app_handle);
+                    app_handle.emit("dsp-settings-changed", &engine_state.dsp_settings).unwrap();
                 }
                 EngineCommand::TogglePause => {
                     is_paused = !is_paused;
@@ -252,6 +244,7 @@ pub fn run_effect_engine(
                     );
                     state_changed = true;
                     emit_devices_update(&devices, &app_handle);
+                    emit_virtuals_update(&virtuals, &app_handle);
                 }
                 EngineCommand::RemoveDevice { device_ip } => {
                     devices.remove(&device_ip);
@@ -259,6 +252,7 @@ pub fn run_effect_engine(
                     virtuals.remove(&virtual_id);
                     state_changed = true;
                     emit_devices_update(&devices, &app_handle);
+                    emit_virtuals_update(&virtuals, &app_handle);
                 }
                 EngineCommand::AddVirtual { config } => {
                     let pixel_count = config
@@ -279,6 +273,7 @@ pub fn run_effect_engine(
                         },
                     );
                     state_changed = true;
+                    emit_virtuals_update(&virtuals, &app_handle);
                 }
                 EngineCommand::UpdateVirtual { config } => {
                     if let Some(active_virtual) = virtuals.get_mut(&config.id) {
@@ -295,10 +290,12 @@ pub fn run_effect_engine(
                         active_virtual.b_channel.resize(pixel_count, 0.0);
                     }
                     state_changed = true;
+                    emit_virtuals_update(&virtuals, &app_handle);
                 }
                 EngineCommand::RemoveVirtual { virtual_id } => {
                     virtuals.remove(&virtual_id);
                     state_changed = true;
+                    emit_virtuals_update(&virtuals, &app_handle);
                 }
                 EngineCommand::StartEffect { virtual_id, config } => {
                     if let Some(active_virtual) = virtuals.get_mut(&virtual_id) {
@@ -321,12 +318,12 @@ pub fn run_effect_engine(
                         }
                     }
                 }
-                EngineCommand::Subscribe { ip_address } => {
-                    subscribed_ips.insert(ip_address);
-                }
-                EngineCommand::Unsubscribe { ip_address } => {
-                    subscribed_ips.remove(&ip_address);
-                }
+                // EngineCommand::Subscribe { ip_address } => {
+                //     subscribed_ips.insert(ip_address);
+                // }
+                // EngineCommand::Unsubscribe { ip_address } => {
+                //     subscribed_ips.remove(&ip_address);
+                // }
                 EngineCommand::SetTargetFps { fps } => {
                     if fps > 0 {
                         target_frame_duration = Duration::from_millis(1000 / fps as u64);
@@ -342,7 +339,7 @@ pub fn run_effect_engine(
                 .collect();
             store::save_engine_state(&app_handle, &engine_state);
             // emit_virtuals_update(&virtuals, &app_handle);
-            emit_full_state_update(&engine_state, &app_handle);
+            // emit_full_state_update(&engine_state, &app_handle);
         }
 
         if !is_paused {
@@ -597,30 +594,6 @@ pub fn get_devices(state_tx: State<EngineStateTx>) -> Result<Vec<Device>, String
 
 #[tauri::command]
 #[specta::specta]
-pub fn subscribe_to_frames(
-    ip_address: String,
-    command_tx: State<EngineCommandTx>,
-) -> Result<(), String> {
-    command_tx
-        .0
-        .send(EngineCommand::Subscribe { ip_address })
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn unsubscribe_from_frames(
-    ip_address: String,
-    command_tx: State<EngineCommandTx>,
-) -> Result<(), String> {
-    command_tx
-        .0
-        .send(EngineCommand::Unsubscribe { ip_address })
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub fn set_target_fps(fps: u32, command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx
         .0
@@ -634,5 +607,17 @@ pub fn trigger_reload(command_tx: State<EngineCommandTx>) -> Result<(), String> 
     command_tx
         .0
         .send(EngineCommand::ReloadState)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_dsp_settings(
+    settings: DspSettings,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx
+        .0
+        .send(EngineCommand::UpdateDspSettings { settings })
         .map_err(|e| e.to_string())
 }

@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "identifier": "com.blade.ledfx-rust",
   "build": {
-    "beforeDevCommand": "yarn dev",
+    "beforeDevCommand": "",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "yarn build",
     "frontendDist": "../dist"

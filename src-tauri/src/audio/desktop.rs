@@ -99,38 +99,64 @@ pub fn run_desktop_capture(
 ) {
     let host = cpal::default_host();
     let mut current_stream: Option<Stream> = None;
+
+    // We start a loop that continuously checks for new commands without blocking.
     loop {
-        if let Ok(command) = command_rx.recv() {
+        // Use try_recv for non-blocking check.
+        if let Ok(command) = command_rx.try_recv() {
             match command {
                 AudioCommand::ChangeDevice(device_name) => {
-                    println!("Changing audio device to: {}", device_name);
+                    println!("[AUDIO] Changing audio device to: {}", device_name);
                     if let Some(stream) = current_stream.take() {
+                        // It's good practice to let the stream stop before dropping.
+                        stream.pause().expect("Failed to pause stream");
                         drop(stream);
                     }
                     let is_loopback =
                         cfg!(target_os = "windows") && device_name.starts_with("System Audio (");
-                    let device = find_device(&host, &device_name, is_loopback);
-                    let config = if is_loopback {
-                        device
-                            .default_output_config()
-                            .expect("no default output config")
+
+                    // It's safer to handle the case where a device might not be found.
+                    if let Some(device) = find_device(&host, &device_name, is_loopback) {
+                        let config = if is_loopback {
+                            device
+                                .default_output_config()
+                                .expect("no default output config")
+                        } else {
+                            device
+                                .default_input_config()
+                                .expect("no default input config")
+                        };
+                        let audio_data_clone = audio_data.clone();
+                        let dsp_settings_clone = dsp_settings.clone();
+                        let stream = build_and_play_stream(
+                            device,
+                            config,
+                            audio_data_clone,
+                            dsp_settings_clone,
+                        );
+                        current_stream = Some(stream);
                     } else {
-                        device
-                            .default_input_config()
-                            .expect("no default input config")
-                    };
-                    let audio_data_clone = audio_data.clone();
-                    let dsp_settings_clone = dsp_settings.clone();
-                    let stream =
-                        build_and_play_stream(device, config, audio_data_clone, dsp_settings_clone);
-                    current_stream = Some(stream);
+                        eprintln!("[AUDIO] Could not find requested device: {}", device_name);
+                    }
                 }
+                // --- START: ADDED LOGIC ---
+                AudioCommand::UpdateSettings(new_settings) => {
+                    println!("[AUDIO] Received new DSP settings.");
+                    let mut settings = dsp_settings.lock().unwrap();
+                    *settings = new_settings;
+                }
+                // --- END: ADDED LOGIC ---
             }
         }
+        
+        // Add a small sleep to prevent the loop from spinning and consuming 100% CPU
+        // when there are no commands.
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 
-fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Device {
+// Helper function `find_device` needs to return an Option for better error handling.
+fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Option<Device> {
     if is_loopback {
         if let Some(stripped_name) = name
             .strip_prefix("System Audio (")
@@ -138,24 +164,23 @@ fn find_device(host: &cpal::Host, name: &str, is_loopback: bool) -> Device {
         {
             if let Some(d) = host
                 .output_devices()
-                .unwrap()
+                .ok()?
                 .find(|d| d.name().unwrap_or_default() == stripped_name)
             {
-                return d;
+                return Some(d);
             }
         }
     }
     if let Some(d) = host
         .input_devices()
-        .unwrap()
+        .ok()?
         .find(|d| d.name().unwrap_or_default() == name)
     {
-        return d;
+        return Some(d);
     }
-    host.default_input_device()
-        .expect("no input device available")
+    // Return None if no specific device is found, letting the caller decide on a fallback.
+    None
 }
-
 fn build_and_play_stream(
     device: Device,
     config: SupportedStreamConfig,

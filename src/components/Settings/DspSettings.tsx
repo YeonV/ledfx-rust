@@ -1,80 +1,86 @@
+// src/components/Settings/DspSettings.tsx
+
 import { useEffect, useState } from 'react';
-import { commands, type DspSettings } from '../../bindings';
-import { SettingsRow } from './SettingsRow';
+import { useStore } from '../../store/useStore';
+import { commands, type DspSettings as DspSettingsType } from '../../bindings';
 import { Slider } from '@mui/material';
-import { AirlineStops, AutoGraph, SouthEast } from '@mui/icons-material';
+import { SettingsRow } from './SettingsRow';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
+import ShutterSpeedIcon from '@mui/icons-material/ShutterSpeed';
+import TimerIcon from '@mui/icons-material/Timer';
 
 const DspSettings = () => {
-  const [settings, setSettings] = useState<DspSettings | null>(null);
+  const { dspSettings } = useStore();
+  // Use local state for sliders to avoid re-rendering the whole app on every drag
+  const [localSettings, setLocalSettings] = useState<DspSettingsType | null>(dspSettings);
 
+  // Sync local state when global state changes (e.g., from an import)
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const result = await commands.getDspSettings();
-        if (result.status === "ok") {
-          setSettings(result.data);
-        }
-      } catch (e) { console.error(e); }
-    };
-    fetchSettings();
-  }, []);
+    setLocalSettings(dspSettings);
+  }, [dspSettings]);
 
-  const handleSettingChange = (field: keyof DspSettings, value: number) => {
-    if (!settings) return;
-    const newSettings = { ...settings, [field]: value };
-    setSettings(newSettings);
-    commands.updateDspSettings(newSettings);
+  // Debounce the backend call
+  useEffect(() => {
+    if (localSettings && JSON.stringify(localSettings) !== JSON.stringify(dspSettings)) {
+      const handler = setTimeout(() => {
+        commands.updateDspSettings(localSettings).catch(console.error);
+      }, 500);
+      return () => clearTimeout(handler);
+    }
+  }, [localSettings, dspSettings]);
+
+  const handleSettingChange = (key: keyof DspSettingsType, value: number) => {
+    if (localSettings) {
+      setLocalSettings({ ...localSettings, [key]: value });
+    }
   };
 
-  if (!settings) {
-    return <div>Loading DSP Settings...</div>;
+  if (!localSettings) {
+    return null; // Or a loading indicator
   }
 
-  return (<>
-
-    <SettingsRow icon={<AutoGraph />} title={`Smoothing Factor: ${settings.smoothing_factor.toFixed(2)}`}>
-      <Slider
-          value={settings.smoothing_factor}
-          onChange={(_e, newValue) => handleSettingChange('smoothing_factor', newValue as number)}
-          aria-labelledby="smoothing-factor-slider"
-          valueLabelDisplay="auto"
-          step={0.01}
-          min={0}
+  return (
+    <>
+      <SettingsRow icon={<ShutterSpeedIcon />} title={`Smoothing: ${localSettings.smoothing_factor.toFixed(2)}`}>
+        <Slider
+          value={localSettings.smoothing_factor}
+          onChange={(_e, val) => handleSettingChange('smoothing_factor', val as number)}
+          min={0.01}
           max={0.99}
-      />
-    </SettingsRow>
-    <SettingsRow icon={<AirlineStops />} title={`AGC Attack: ${settings.agc_attack.toFixed(3)}`}>
-      <Slider
-          value={settings.agc_attack}
-          onChange={(_e, newValue) => handleSettingChange('agc_attack', newValue as number)}
-          aria-labelledby="agc-attack-slider"
+          step={0.01}
           valueLabelDisplay="auto"
-          step={0.001}
+        />
+      </SettingsRow>
+      <SettingsRow icon={<VolumeUpIcon />} title={`AGC Attack: ${localSettings.agc_attack.toFixed(3)}`}>
+        <Slider
+          value={localSettings.agc_attack}
+          onChange={(_e, val) => handleSettingChange('agc_attack', val as number)}
           min={0.001}
           max={0.1}
-      />
-    </SettingsRow>
-    <SettingsRow icon={<SouthEast />} title={`AGC Decay: ${settings.agc_decay.toFixed(3)}`}>
-      <Slider
-          value={settings.agc_decay}
-          onChange={(_e, newValue) => handleSettingChange('agc_decay', newValue as number)}
-          aria-labelledby="agc-decay-slider"
-          valueLabelDisplay="auto"
           step={0.001}
-          min={0.001}
-          max={0.2}
-      />
-    </SettingsRow>
-    <SettingsRow icon={<SouthEast />} title={`Audio Delay (ms): ${settings.audio_delay_ms}`}>
+          valueLabelDisplay="auto"
+        />
+      </SettingsRow>
+      <SettingsRow icon={<VolumeUpIcon />} title={`AGC Decay: ${localSettings.agc_decay.toFixed(2)}`}>
         <Slider
-          value={settings.audio_delay_ms}
-          onChange={(_e, newValue) => handleSettingChange('audio_delay_ms', newValue as number)}
+          value={localSettings.agc_decay}
+          onChange={(_e, val) => handleSettingChange('agc_decay', val as number)}
+          min={0.01}
+          max={0.5}
+          step={0.01}
+          valueLabelDisplay="auto"
+        />
+      </SettingsRow>
+      <SettingsRow icon={<TimerIcon />} title={`Audio Delay: ${localSettings.audio_delay_ms}ms`}>
+        <Slider
+          value={localSettings.audio_delay_ms}
+          onChange={(_e, val) => handleSettingChange('audio_delay_ms', val as number)}
           min={0}
           max={500}
           step={10}
           valueLabelDisplay="auto"
         />
-    </SettingsRow>
+      </SettingsRow>
     </>
   );
 };

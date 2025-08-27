@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useFrameStore } from "./store/frameStore";
 import { listen } from '@tauri-apps/api/event';
 import { Virtuals } from "./components/Virtuals";
-import { commands, type Virtual, type Device, PlaybackState } from "./bindings";
+import { commands, type Virtual, type Device, PlaybackState, DspSettings } from "./bindings";
 import { useStore } from "./store/useStore";
 import { Alert } from "@mui/material";
 import { ConfigProvider } from "./components/ConfigProvider";
@@ -10,7 +10,7 @@ import TopBar from "./components/TopBar/TopBar";
 import "./App.css";
 
 function App() {
-  const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, virtuals, error } = useStore();
+  const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, setDspSettings, virtuals, error } = useStore();
 
   useEffect(() => {
     const fetchInitialState = async () => {
@@ -23,6 +23,9 @@ function App() {
         
         const devicesResult = await commands.getDevices();
         if (devicesResult.status === 'ok') setDevices(devicesResult.data);
+
+        const dspResult = await commands.getDspSettings();
+        if (dspResult.status === 'ok') setDspSettings(dspResult.data);
 
       } catch (e) { console.error("Failed to fetch initial state:", e); }
     };
@@ -44,8 +47,12 @@ function App() {
       setPlaybackState(event.payload);
     });
 
+    const unlistenDsp = listen<DspSettings>('dsp-settings-changed', (event) => {
+      setDspSettings(event.payload);
+    });
+
     return () => {
-      Promise.all([unlistenFrames, unlistenVirtuals, unlistenDevices, unlistenPlayback]).then(([uf, uv, ud, up]) => {
+      Promise.all([unlistenFrames, unlistenVirtuals, unlistenDevices, unlistenPlayback, unlistenDsp]).then(([uf, uv, ud, up, udsp]) => {
         uf();
         uv();
         ud();
