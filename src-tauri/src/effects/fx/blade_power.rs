@@ -1,9 +1,13 @@
-use crate::effects::{get_base_schema, BaseEffectConfig, Effect, schema::{Control, DefaultValue, EffectSetting}};
+use crate::audio::{highs_power, lows_power, mids_power, AudioAnalysisData};
+use crate::effects::{
+    get_base_schema,
+    schema::{Control, DefaultValue, EffectSetting},
+    BaseEffectConfig, Effect,
+};
 use crate::utils::colors;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
-use crate::audio::{highs_power, lows_power, mids_power, AudioAnalysisData};
 
 pub const NAME: &str = "Blade Power";
 
@@ -25,14 +29,22 @@ pub fn get_schema() -> Vec<EffectSetting> {
             id: "decay".to_string(),
             name: "Decay".to_string(),
             description: "Rate of color decay".to_string(),
-            control: Control::Slider { min: 0.0, max: 1.0, step: 0.01 },
+            control: Control::Slider {
+                min: 0.0,
+                max: 1.0,
+                step: 0.01,
+            },
             default_value: DefaultValue::Number(0.7),
         },
         EffectSetting {
             id: "multiplier".to_string(),
             name: "Multiplier".to_string(),
             description: "Make the reactive bar bigger/smaller".to_string(),
-            control: Control::Slider { min: 0.0, max: 1.0, step: 0.01 },
+            control: Control::Slider {
+                min: 0.0,
+                max: 1.0,
+                step: 0.01,
+            },
             default_value: DefaultValue::Number(0.5),
         },
         EffectSetting {
@@ -77,7 +89,9 @@ impl BladePower {
     }
 
     fn rebuild_palette(&mut self, pixel_count: usize) {
-        if pixel_count == 0 { return; }
+        if pixel_count == 0 {
+            return;
+        }
         if self.v_channel.len() != pixel_count {
             self.v_channel = vec![0.0; pixel_count];
         }
@@ -88,7 +102,9 @@ impl BladePower {
 impl Effect for BladePower {
     fn render(&mut self, audio_data: &AudioAnalysisData, frame: &mut [u8]) {
         let pixel_count = frame.len() / 3;
-        if pixel_count == 0 { return; }
+        if pixel_count == 0 {
+            return;
+        }
 
         if self.gradient_palette.len() != pixel_count {
             self.rebuild_palette(pixel_count);
@@ -100,9 +116,8 @@ impl Effect for BladePower {
             _ => lows_power(&audio_data.melbanks),
         };
 
-        
         // println!("[BLADE_POWER LOG] Rendering frame. Power: {:.4}, Multiplier: {}, Decay: {}", power, self.config.multiplier, self.config.decay);
-        
+
         let bar_level = (power * self.config.multiplier * 2.0).min(1.0);
         let bar_idx = (bar_level * pixel_count as f32) as usize;
 
@@ -123,7 +138,7 @@ impl Effect for BladePower {
             let g = (base_color[1] as f32 * brightness) as u8;
             let b = (base_color[2] as f32 * brightness) as u8;
 
-            frame[i * 3]     = r;
+            frame[i * 3] = r;
             frame[i * 3 + 1] = g;
             frame[i * 3 + 2] = b;
         }
@@ -132,13 +147,16 @@ impl Effect for BladePower {
     fn update_config(&mut self, config: Value) {
         if let Ok(new_config) = serde_json::from_value(config) {
             self.config = new_config;
-            println!("[BLADE_POWER LOG] Config updated successfully. New multiplier: {}", self.config.multiplier);
+            println!(
+                "[BLADE_POWER LOG] Config updated successfully. New multiplier: {}",
+                self.config.multiplier
+            );
             self.gradient_palette.clear();
         } else {
             eprintln!("Failed to deserialize settings for BladePower");
         }
     }
-    
+
     fn get_base_config(&self) -> BaseEffectConfig {
         self.config.base.clone()
     }

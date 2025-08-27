@@ -9,6 +9,7 @@ import { AddButton } from "./components/AddButton";
 import { GlobalControls } from "./components/GlobalControls";
 import { Alert, AppBar, Box, Toolbar } from "@mui/material";
 import "./App.css";
+import { ConfigProvider } from "./components/ConfigProvider";
 
 function App() {
   const { setAvailableEffects, setVirtuals, setDevices, setPlaybackState, devices, virtuals, error } = useStore();
@@ -55,7 +56,9 @@ function App() {
     };
   }, [setAvailableEffects, setVirtuals, setDevices]);
 
-  return (<>
+  return (
+  
+    <ConfigProvider>
     <AppBar elevation={0} color="error" position="sticky">
       <Toolbar color="error" sx={{ minHeight: '48px !important', justifyContent: 'space-between', px: '16px !important' }}>
         <Box>
@@ -73,7 +76,7 @@ function App() {
     <main style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', overflowY: 'auto' }}>
       {virtuals.length > 0 && <Virtuals />}     
     </main>
-    </>
+    </ConfigProvider>
   );
 }
 

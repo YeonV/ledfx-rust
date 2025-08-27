@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod effects;
 pub mod engine;
+pub mod store;
 pub mod types;
 pub mod utils;
 pub mod wled;
@@ -45,7 +46,10 @@ fn configure_builder() -> Builder<tauri::Wry> {
             audio::get_dsp_settings,
             audio::update_dsp_settings,
             engine::get_playback_state,
-            engine::toggle_pause
+            engine::toggle_pause,
+            store::export_settings,
+            store::import_settings,
+            engine::trigger_reload
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()
@@ -83,8 +87,11 @@ pub fn run() {
     }
 
     let builder = configure_builder();
-    
+
     let mut tauri_builder = tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .manage(engine::EngineCommandTx(engine_command_tx))
@@ -101,7 +108,12 @@ pub fn run() {
 
         thread::spawn(move || {
             let audio_data_state = state_handle.state::<audio::SharedAudioData>();
-            engine::run_effect_engine(engine_command_rx, engine_state_rx, audio_data_state, engine_handle);
+            engine::run_effect_engine(
+                engine_command_rx,
+                engine_state_rx,
+                audio_data_state,
+                engine_handle,
+            );
         });
 
         thread::spawn(move || {

@@ -52,7 +52,9 @@ const HIGHS_HIGH: usize = 127;
 pub fn lows_power(melbanks: &[f32]) -> f32 {
     let high = BASS_HIGH.min(melbanks.len().saturating_sub(1));
     let low = BASS_LOW.min(high);
-    if low >= high { return 0.0; }
+    if low >= high {
+        return 0.0;
+    }
     let slice = &melbanks[low..=high];
     slice.iter().sum::<f32>() / slice.len() as f32
 }
@@ -60,7 +62,9 @@ pub fn lows_power(melbanks: &[f32]) -> f32 {
 pub fn mids_power(melbanks: &[f32]) -> f32 {
     let high = MIDS_HIGH.min(melbanks.len().saturating_sub(1));
     let low = MIDS_LOW.min(high);
-    if low >= high { return 0.0; }
+    if low >= high {
+        return 0.0;
+    }
     let slice = &melbanks[low..=high];
     slice.iter().sum::<f32>() / slice.len() as f32
 }
@@ -68,11 +72,12 @@ pub fn mids_power(melbanks: &[f32]) -> f32 {
 pub fn highs_power(melbanks: &[f32]) -> f32 {
     let high = HIGHS_HIGH.min(melbanks.len().saturating_sub(1));
     let low = HIGHS_LOW.min(high);
-    if low >= high { return 0.0; }
+    if low >= high {
+        return 0.0;
+    }
     let slice = &melbanks[low..=high];
     slice.iter().sum::<f32>() / slice.len() as f32
 }
-
 
 #[derive(Default)]
 pub struct SharedAudioData(pub Arc<Mutex<AudioAnalysisData>>);
@@ -141,9 +146,7 @@ pub fn set_audio_device(
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_audio_analysis(
-    audio_data: State<SharedAudioData>,
-) -> Result<AudioAnalysisData, String> {
+pub fn get_audio_analysis(audio_data: State<SharedAudioData>) -> Result<AudioAnalysisData, String> {
     let data = audio_data.0.lock().map_err(|e| e.to_string())?;
     Ok(data.clone())
 }

@@ -4,6 +4,7 @@ import { Paper, Box, Typography, TextField, InputAdornment, IconButton } from '@
 import { Search, Clear, DragIndicator, BugReport } from '@mui/icons-material';
 import JsonTreeView from './JsonTreeView';
 import { useStore } from '../store/useStore';
+import IconBtn from './IconBtn';
 
 
 // A recursive function to filter the state object based on the search term
@@ -79,9 +80,7 @@ function DevTools() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (<>
-  <IconButton onClick={() => setOpen(!open)}>
-   <BugReport />
-  </IconButton>
+  <IconBtn icon={<BugReport />} text="Open DevTools" onClick={() => setOpen(!open)} />
   {open && <Paper
       elevation={8}
       sx={{

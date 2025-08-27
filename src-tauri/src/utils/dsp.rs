@@ -26,13 +26,13 @@ pub fn generate_mel_filterbank(
         .map(|i| min_mel + i as f32 * (max_mel - min_mel) / (num_bands + 1) as f32)
         .collect();
     let hz_points: Vec<f32> = mel_points.into_iter().map(mel_to_hz).collect();
-    
+
     let mut fft_bins: Vec<usize> = hz_points
         .into_iter()
         .map(|hz| (hz * (fft_size as f32 / sample_rate as f32)).floor() as usize)
         .collect();
     for i in 1..fft_bins.len() {
-        fft_bins[i] = fft_bins[i].max(fft_bins[i-1] + 1);
+        fft_bins[i] = fft_bins[i].max(fft_bins[i - 1] + 1);
     }
 
     let mut filters = Vec::with_capacity(num_bands);
@@ -118,7 +118,7 @@ pub fn gaussian_blur_1d(data: &mut [f32], sigma: f32) {
             } else {
                 data_idx
             } as usize;
-            
+
             sum += original[read_idx.min(data.len() - 1)] * kernel[k_idx];
         }
         data[i as usize] = sum;

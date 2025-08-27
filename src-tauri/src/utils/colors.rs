@@ -21,7 +21,7 @@ pub fn parse_gradient(gradient_str: &str, size: usize) -> Vec<[u8; 3]> {
 // --- THIS IS THE FIX ---
 // Helper to parse a single color token (hex, short-hex, or rgb).
 pub fn parse_single_color(color_str: &str) -> Option<[u8; 3]> {
-// --- END FIX ---
+    // --- END FIX ---
     let s = color_str.trim();
     if s.starts_with('#') {
         let hex = s.strip_prefix('#').unwrap();
@@ -57,16 +57,20 @@ pub fn parse_single_color(color_str: &str) -> Option<[u8; 3]> {
 // Uses regex to find all color stops in a `linear-gradient` string.
 fn parse_color_stops(gradient_str: &str) -> Vec<(f32, [u8; 3])> {
     // This regex captures the color part (hex or rgb) and its percentage.
-    let re = Regex::new(r"(#[0-9a-fA-F]{3,6}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\))\s+([\d.]+)%").unwrap();
-    let mut stops: Vec<(f32, [u8; 3])> = re.captures_iter(gradient_str).filter_map(|cap| {
-        let color_str = cap.get(1).map_or("", |m| m.as_str());
-        let percent_str = cap.get(2).map_or("", |m| m.as_str());
-        
-        let color = parse_single_color(color_str)?;
-        let percent = percent_str.parse::<f32>().ok()? / 100.0;
-        
-        Some((percent, color))
-    }).collect();
+    let re = Regex::new(r"(#[0-9a-fA-F]{3,6}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\))\s+([\d.]+)%")
+        .unwrap();
+    let mut stops: Vec<(f32, [u8; 3])> = re
+        .captures_iter(gradient_str)
+        .filter_map(|cap| {
+            let color_str = cap.get(1).map_or("", |m| m.as_str());
+            let percent_str = cap.get(2).map_or("", |m| m.as_str());
+
+            let color = parse_single_color(color_str)?;
+            let percent = percent_str.parse::<f32>().ok()? / 100.0;
+
+            Some((percent, color))
+        })
+        .collect();
 
     // Ensure stops are sorted by percentage.
     stops.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
@@ -86,9 +90,16 @@ fn generate_palette_from_stops(stops: &[(f32, [u8; 3])], size: usize) -> Vec<[u8
 
     for i in 0..size {
         let pos = i as f32 / (size - 1).max(1) as f32; // Prevent division by zero for size=1
-        
-        let end_stop_idx = stops.iter().position(|s| s.0 >= pos).unwrap_or(stops.len() - 1);
-        let start_stop_idx = if end_stop_idx > 0 { end_stop_idx - 1 } else { 0 };
+
+        let end_stop_idx = stops
+            .iter()
+            .position(|s| s.0 >= pos)
+            .unwrap_or(stops.len() - 1);
+        let start_stop_idx = if end_stop_idx > 0 {
+            end_stop_idx - 1
+        } else {
+            0
+        };
 
         let start_stop = &stops[start_stop_idx];
         let end_stop = &stops[end_stop_idx];

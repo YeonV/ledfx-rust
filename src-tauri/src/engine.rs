@@ -1,16 +1,18 @@
 use crate::audio::SharedAudioData;
 use crate::effects::Effect;
+use crate::store;
 use crate::types::{Device, MatrixCell, Virtual};
 use crate::utils::{colors, ddp, dsp};
-use serde::{Serialize};
+use serde::Serialize;
 use specta::Type;
+#[cfg(debug_assertions)]
+use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::net::UdpSocket;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
-
 mod generated;
 pub use generated::*;
 
@@ -38,29 +40,56 @@ pub struct EngineStateTx(pub Sender<EngineRequest>);
 pub enum EngineRequest {
     GetVirtuals(Sender<Vec<Virtual>>),
     GetDevices(Sender<Vec<Device>>),
-    GetPlaybackState(Sender<PlaybackState>), 
+    GetPlaybackState(Sender<PlaybackState>),
 }
 
 pub enum EngineCommand {
-    StartEffect { virtual_id: String, config: EffectConfig },
-    StopEffect { virtual_id: String },
-    UpdateSettings { virtual_id: String, settings: EffectConfig },
-    AddVirtual { config: Virtual },
-    UpdateVirtual { config: Virtual },
-    RemoveVirtual { virtual_id: String },
-    AddDevice { config: Device },
-    RemoveDevice { device_ip: String },
-    Subscribe { ip_address: String },
-    Unsubscribe { ip_address: String },
-    SetTargetFps { fps: u32 },
+    StartEffect {
+        virtual_id: String,
+        config: EffectConfig,
+    },
+    StopEffect {
+        virtual_id: String,
+    },
+    UpdateSettings {
+        virtual_id: String,
+        settings: EffectConfig,
+    },
+    AddVirtual {
+        config: Virtual,
+    },
+    UpdateVirtual {
+        config: Virtual,
+    },
+    RemoveVirtual {
+        virtual_id: String,
+    },
+    AddDevice {
+        config: Device,
+    },
+    RemoveDevice {
+        device_ip: String,
+    },
+    Subscribe {
+        ip_address: String,
+    },
+    Unsubscribe {
+        ip_address: String,
+    },
+    SetTargetFps {
+        fps: u32,
+    },
     TogglePause,
+    ReloadState,
 }
 
 pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);
 
 fn emit_virtuals_update(virtuals: &HashMap<String, ActiveVirtual>, app_handle: &AppHandle) {
     let virtual_configs: Vec<Virtual> = virtuals.values().map(|v| v.config.clone()).collect();
-    app_handle.emit("virtuals-changed", &virtual_configs).unwrap();
+    app_handle
+        .emit("virtuals-changed", &virtual_configs)
+        .unwrap();
 }
 
 fn emit_devices_update(devices: &HashMap<String, Device>, app_handle: &AppHandle) {
@@ -68,7 +97,9 @@ fn emit_devices_update(devices: &HashMap<String, Device>, app_handle: &AppHandle
     app_handle.emit("devices-changed", &device_list).unwrap();
 }
 fn emit_playback_state_update(is_paused: bool, app_handle: &AppHandle) {
-    app_handle.emit("playback-state-changed", &PlaybackState { is_paused }).unwrap();
+    app_handle
+        .emit("playback-state-changed", &PlaybackState { is_paused })
+        .unwrap();
 }
 
 pub fn run_effect_engine(
@@ -77,9 +108,31 @@ pub fn run_effect_engine(
     audio_data: State<SharedAudioData>,
     app_handle: AppHandle,
 ) {
-    let mut virtuals: HashMap<String, ActiveVirtual> = HashMap::new();
-    let mut devices: HashMap<String, Device> = HashMap::new();
-    
+    let mut engine_state = store::load_engine_state(&app_handle);
+    let mut virtuals: HashMap<String, ActiveVirtual> = engine_state
+        .virtuals
+        .into_iter()
+        .map(|(id, config)| {
+            let pixel_count = config
+                .matrix_data
+                .iter()
+                .flat_map(|row| row.iter())
+                .filter(|cell| cell.is_some())
+                .count();
+            (
+                id,
+                ActiveVirtual {
+                    effect: None,
+                    config,
+                    pixel_count,
+                    r_channel: vec![0.0; pixel_count],
+                    g_channel: vec![0.0; pixel_count],
+                    b_channel: vec![0.0; pixel_count],
+                },
+            )
+        })
+        .collect();
+    let mut devices = engine_state.devices;
     let mut subscribed_ips: HashSet<String> = HashSet::new();
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     let mut frame_count: u8 = 0;
@@ -91,7 +144,8 @@ pub fn run_effect_engine(
         if let Ok(request) = request_rx.try_recv() {
             match request {
                 EngineRequest::GetVirtuals(responder) => {
-                    let virtual_configs: Vec<Virtual> = virtuals.values().map(|v| v.config.clone()).collect();
+                    let virtual_configs: Vec<Virtual> =
+                        virtuals.values().map(|v| v.config.clone()).collect();
                     responder.send(virtual_configs).unwrap();
                 }
                 EngineRequest::GetDevices(responder) => {
@@ -107,6 +161,36 @@ pub fn run_effect_engine(
         let mut state_changed = false;
         while let Ok(command) = command_rx.try_recv() {
             match command {
+                EngineCommand::ReloadState => {
+                    println!("[ENGINE] Reloading state from disk.");
+                    engine_state = store::load_engine_state(&app_handle);
+                    virtuals = engine_state
+                        .virtuals
+                        .into_iter()
+                        .map(|(id, config)| {
+                            let pixel_count = config
+                                .matrix_data
+                                .iter()
+                                .flat_map(|row| row.iter())
+                                .filter(|cell| cell.is_some())
+                                .count();
+                            (
+                                id,
+                                ActiveVirtual {
+                                    effect: None,
+                                    config,
+                                    pixel_count,
+                                    r_channel: vec![0.0; pixel_count],
+                                    g_channel: vec![0.0; pixel_count],
+                                    b_channel: vec![0.0; pixel_count],
+                                },
+                            )
+                        })
+                        .collect();
+                    devices = engine_state.devices;
+                    state_changed = true;
+                    emit_devices_update(&devices, &app_handle);
+                }
                 EngineCommand::TogglePause => {
                     is_paused = !is_paused;
                     println!("[ENGINE] Playback state toggled. Paused: {}", is_paused);
@@ -115,30 +199,38 @@ pub fn run_effect_engine(
                 EngineCommand::AddDevice { config } => {
                     let device_ip = config.ip_address.clone();
                     devices.insert(device_ip.clone(), config.clone());
-
                     let virtual_id = format!("device_{}", device_ip);
-                    let matrix_data = vec![
-                        (0..config.led_count).map(|i| Some(MatrixCell {
-                            device_id: device_ip.clone(),
-                            pixel: i,
-                        })).collect()
-                    ];
+                    let matrix_data = vec![(0..config.led_count)
+                        .map(|i| {
+                            Some(MatrixCell {
+                                device_id: device_ip.clone(),
+                                pixel: i,
+                            })
+                        })
+                        .collect()];
                     let device_virtual = Virtual {
                         id: virtual_id.clone(),
                         name: config.name.clone(),
                         matrix_data,
                         is_device: Some(device_ip.clone()),
                     };
-                    
-                    let pixel_count = device_virtual.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-                    virtuals.insert(virtual_id, ActiveVirtual {
-                        effect: None,
-                        config: device_virtual,
-                        pixel_count,
-                        r_channel: vec![0.0; pixel_count],
-                        g_channel: vec![0.0; pixel_count],
-                        b_channel: vec![0.0; pixel_count],
-                    });
+                    let pixel_count = device_virtual
+                        .matrix_data
+                        .iter()
+                        .flat_map(|row| row.iter())
+                        .filter(|cell| cell.is_some())
+                        .count();
+                    virtuals.insert(
+                        virtual_id,
+                        ActiveVirtual {
+                            effect: None,
+                            config: device_virtual,
+                            pixel_count,
+                            r_channel: vec![0.0; pixel_count],
+                            g_channel: vec![0.0; pixel_count],
+                            b_channel: vec![0.0; pixel_count],
+                        },
+                    );
                     state_changed = true;
                     emit_devices_update(&devices, &app_handle);
                 }
@@ -150,20 +242,33 @@ pub fn run_effect_engine(
                     emit_devices_update(&devices, &app_handle);
                 }
                 EngineCommand::AddVirtual { config } => {
-                     let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-                     virtuals.insert(config.id.clone(), ActiveVirtual {
-                         effect: None,
-                         config,
-                         pixel_count,
-                         r_channel: vec![0.0; pixel_count],
-                         g_channel: vec![0.0; pixel_count],
-                         b_channel: vec![0.0; pixel_count],
-                     });
+                    let pixel_count = config
+                        .matrix_data
+                        .iter()
+                        .flat_map(|row| row.iter())
+                        .filter(|cell| cell.is_some())
+                        .count();
+                    virtuals.insert(
+                        config.id.clone(),
+                        ActiveVirtual {
+                            effect: None,
+                            config,
+                            pixel_count,
+                            r_channel: vec![0.0; pixel_count],
+                            g_channel: vec![0.0; pixel_count],
+                            b_channel: vec![0.0; pixel_count],
+                        },
+                    );
                     state_changed = true;
                 }
                 EngineCommand::UpdateVirtual { config } => {
                     if let Some(active_virtual) = virtuals.get_mut(&config.id) {
-                        let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
+                        let pixel_count = config
+                            .matrix_data
+                            .iter()
+                            .flat_map(|row| row.iter())
+                            .filter(|cell| cell.is_some())
+                            .count();
                         active_virtual.config = config;
                         active_virtual.pixel_count = pixel_count;
                         active_virtual.r_channel.resize(pixel_count, 0.0);
@@ -186,7 +291,10 @@ pub fn run_effect_engine(
                         active_virtual.effect = None;
                     }
                 }
-                EngineCommand::UpdateSettings { virtual_id, settings } => {
+                EngineCommand::UpdateSettings {
+                    virtual_id,
+                    settings,
+                } => {
                     if let Some(active_virtual) = virtuals.get_mut(&virtual_id) {
                         if let Some(effect) = &mut active_virtual.effect {
                             let config_value = match settings {
@@ -197,14 +305,26 @@ pub fn run_effect_engine(
                         }
                     }
                 }
-                EngineCommand::Subscribe { ip_address } => { subscribed_ips.insert(ip_address); }
-                EngineCommand::Unsubscribe { ip_address } => { subscribed_ips.remove(&ip_address); }
+                EngineCommand::Subscribe { ip_address } => {
+                    subscribed_ips.insert(ip_address);
+                }
+                EngineCommand::Unsubscribe { ip_address } => {
+                    subscribed_ips.remove(&ip_address);
+                }
                 EngineCommand::SetTargetFps { fps } => {
-                    if fps > 0 { target_frame_duration = Duration::from_millis(1000 / fps as u64); }
+                    if fps > 0 {
+                        target_frame_duration = Duration::from_millis(1000 / fps as u64);
+                    }
                 }
             }
         }
         if state_changed {
+            engine_state.devices = devices.clone();
+            engine_state.virtuals = virtuals
+                .iter()
+                .map(|(id, v)| (id.clone(), v.config.clone()))
+                .collect();
+            store::save_engine_state(&app_handle, &engine_state);
             emit_virtuals_update(&virtuals, &app_handle);
         }
 
@@ -245,13 +365,22 @@ pub fn run_effect_engine(
                             let first_half_g = &g_clone[0..half_len];
                             let first_half_b = &b_clone[0..half_len];
 
-                            active_virtual.r_channel[0..half_len].copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
-                            active_virtual.g_channel[0..half_len].copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
-                            active_virtual.b_channel[0..half_len].copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
+                            active_virtual.r_channel[0..half_len].copy_from_slice(
+                                &first_half_r.iter().rev().cloned().collect::<Vec<f32>>(),
+                            );
+                            active_virtual.g_channel[0..half_len].copy_from_slice(
+                                &first_half_g.iter().rev().cloned().collect::<Vec<f32>>(),
+                            );
+                            active_virtual.b_channel[0..half_len].copy_from_slice(
+                                &first_half_b.iter().rev().cloned().collect::<Vec<f32>>(),
+                            );
 
-                            active_virtual.r_channel[pixel_count - half_len..].copy_from_slice(first_half_r);
-                            active_virtual.g_channel[pixel_count - half_len..].copy_from_slice(first_half_g);
-                            active_virtual.b_channel[pixel_count - half_len..].copy_from_slice(first_half_b);
+                            active_virtual.r_channel[pixel_count - half_len..]
+                                .copy_from_slice(first_half_r);
+                            active_virtual.g_channel[pixel_count - half_len..]
+                                .copy_from_slice(first_half_g);
+                            active_virtual.b_channel[pixel_count - half_len..]
+                                .copy_from_slice(first_half_b);
                         } else {
                             for i in 0..half_len {
                                 let mirror_i = pixel_count - 1 - i;
@@ -266,23 +395,33 @@ pub fn run_effect_engine(
                         active_virtual.b_channel.reverse();
                     }
 
-                    let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0, 0, 0]);
+                    let bg_color = colors::parse_single_color(&base_config.background_color)
+                        .unwrap_or([0, 0, 0]);
                     for i in 0..pixel_count {
-                        virtual_frame[i * 3]     = (active_virtual.r_channel[i] as u8).saturating_add(bg_color[0]);
-                        virtual_frame[i * 3 + 1] = (active_virtual.g_channel[i] as u8).saturating_add(bg_color[1]);
-                        virtual_frame[i * 3 + 2] = (active_virtual.b_channel[i] as u8).saturating_add(bg_color[2]);
+                        virtual_frame[i * 3] =
+                            (active_virtual.r_channel[i] as u8).saturating_add(bg_color[0]);
+                        virtual_frame[i * 3 + 1] =
+                            (active_virtual.g_channel[i] as u8).saturating_add(bg_color[1]);
+                        virtual_frame[i * 3 + 2] =
+                            (active_virtual.b_channel[i] as u8).saturating_add(bg_color[2]);
                     }
-                    
+
                     let mut linear_index = 0;
                     for row in &active_virtual.config.matrix_data {
                         for cell in row {
                             if let Some(cell_data) = cell {
                                 if let Some(device) = devices.get(&cell_data.device_id) {
-                                    let device_buffer = device_buffers.entry(cell_data.device_id.clone()).or_insert_with(|| vec![0; device.led_count as usize * 3]);
+                                    let device_buffer = device_buffers
+                                        .entry(cell_data.device_id.clone())
+                                        .or_insert_with(|| vec![0; device.led_count as usize * 3]);
                                     let source_idx = linear_index * 3;
                                     let dest_idx = cell_data.pixel as usize * 3;
-                                    if dest_idx + 2 < device_buffer.len() && source_idx + 2 < virtual_frame.len() {
-                                        device_buffer[dest_idx..dest_idx+3].copy_from_slice(&virtual_frame[source_idx..source_idx+3]);
+                                    if dest_idx + 2 < device_buffer.len()
+                                        && source_idx + 2 < virtual_frame.len()
+                                    {
+                                        device_buffer[dest_idx..dest_idx + 3].copy_from_slice(
+                                            &virtual_frame[source_idx..source_idx + 3],
+                                        );
                                     }
                                 }
                                 linear_index += 1;
@@ -297,7 +436,7 @@ pub fn run_effect_engine(
                 let destination = format!("{}:4048", ip);
                 let _ = ddp::send_ddp_packet(&socket, &destination, 0, buffer, frame_count);
             }
-            
+
             let preview_payload: HashMap<String, Vec<u8>> = preview_frames.into_iter().collect();
             if !preview_payload.is_empty() {
                 app_handle.emit("engine-tick", &preview_payload).unwrap();
@@ -311,74 +450,120 @@ pub fn run_effect_engine(
     }
 }
 
-
 #[tauri::command]
 #[specta::specta]
 pub fn get_playback_state(state_tx: State<EngineStateTx>) -> Result<PlaybackState, String> {
     let (responder_tx, responder_rx) = mpsc::channel();
-    state_tx.0.send(EngineRequest::GetPlaybackState(responder_tx)).map_err(|e| e.to_string())?;
+    state_tx
+        .0
+        .send(EngineRequest::GetPlaybackState(responder_tx))
+        .map_err(|e| e.to_string())?;
     responder_rx.recv().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn toggle_pause(command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::TogglePause).map_err(|e| e.to_string())
+    command_tx
+        .0
+        .send(EngineCommand::TogglePause)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn start_effect(virtual_id: String, config: EffectConfig, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::StartEffect { virtual_id, config }).map_err(|e| e.to_string())
+pub fn start_effect(
+    virtual_id: String,
+    config: EffectConfig,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx
+        .0
+        .send(EngineCommand::StartEffect { virtual_id, config })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn stop_effect(virtual_id: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::StopEffect { virtual_id }).map_err(|e| e.to_string())
+    command_tx
+        .0
+        .send(EngineCommand::StopEffect { virtual_id })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn update_effect_settings(virtual_id: String, settings: EffectConfig, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::UpdateSettings { virtual_id, settings }).map_err(|e| e.to_string())
+pub fn update_effect_settings(
+    virtual_id: String,
+    settings: EffectConfig,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx
+        .0
+        .send(EngineCommand::UpdateSettings {
+            virtual_id,
+            settings,
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn add_virtual(config: Virtual, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::AddVirtual { config }).map_err(|e| e.to_string())
+    command_tx
+        .0
+        .send(EngineCommand::AddVirtual { config })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn update_virtual(config: Virtual, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::UpdateVirtual { config }).map_err(|e| e.to_string())
+    command_tx
+        .0
+        .send(EngineCommand::UpdateVirtual { config })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn remove_virtual(virtual_id: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::RemoveVirtual { virtual_id }).map_err(|e| e.to_string())
+pub fn remove_virtual(
+    virtual_id: String,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx
+        .0
+        .send(EngineCommand::RemoveVirtual { virtual_id })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn add_device(config: Device, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::AddDevice { config }).map_err(|e| e.to_string())
+    command_tx
+        .0
+        .send(EngineCommand::AddDevice { config })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn remove_device(device_ip: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::RemoveDevice { device_ip }).map_err(|e| e.to_string())
+    command_tx
+        .0
+        .send(EngineCommand::RemoveDevice { device_ip })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn get_virtuals(state_tx: State<EngineStateTx>) -> Result<Vec<Virtual>, String> {
     let (responder_tx, responder_rx) = mpsc::channel();
-    state_tx.0.send(EngineRequest::GetVirtuals(responder_tx)).map_err(|e| e.to_string())?;
+    state_tx
+        .0
+        .send(EngineRequest::GetVirtuals(responder_tx))
+        .map_err(|e| e.to_string())?;
     responder_rx.recv().map_err(|e| e.to_string())
 }
 
@@ -386,24 +571,51 @@ pub fn get_virtuals(state_tx: State<EngineStateTx>) -> Result<Vec<Virtual>, Stri
 #[specta::specta]
 pub fn get_devices(state_tx: State<EngineStateTx>) -> Result<Vec<Device>, String> {
     let (responder_tx, responder_rx) = mpsc::channel();
-    state_tx.0.send(EngineRequest::GetDevices(responder_tx)).map_err(|e| e.to_string())?;
+    state_tx
+        .0
+        .send(EngineRequest::GetDevices(responder_tx))
+        .map_err(|e| e.to_string())?;
     responder_rx.recv().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn subscribe_to_frames(ip_address: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::Subscribe { ip_address }).map_err(|e| e.to_string())
+pub fn subscribe_to_frames(
+    ip_address: String,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx
+        .0
+        .send(EngineCommand::Subscribe { ip_address })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn unsubscribe_from_frames(ip_address: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::Unsubscribe { ip_address }).map_err(|e| e.to_string())
+pub fn unsubscribe_from_frames(
+    ip_address: String,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx
+        .0
+        .send(EngineCommand::Unsubscribe { ip_address })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn set_target_fps(fps: u32, command_tx: State<EngineCommandTx>) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::SetTargetFps { fps }).map_err(|e| e.to_string())
+    command_tx
+        .0
+        .send(EngineCommand::SetTargetFps { fps })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn trigger_reload(command_tx: State<EngineCommandTx>) -> Result<(), String> {
+    command_tx
+        .0
+        .send(EngineCommand::ReloadState)
+        .map_err(|e| e.to_string())
 }

@@ -42,7 +42,7 @@
 //         writeln!(file, "use serde_json::Value;")?;
 //         writeln!(file, "use specta::Type;")?;
 //         writeln!(file, "pub use crate::effects::schema::{{Control, DefaultValue, EffectSetting}};\n")?;
-        
+
 //         writeln!(file, "mod fx;")?;
 //         for effect in &effects {
 //             writeln!(file, "pub use fx::{};", effect)?;
@@ -74,7 +74,7 @@
 //         writeln!(file, "use serde::{{Deserialize, Serialize}};")?;
 //         writeln!(file, "use specta::Type;")?;
 //         writeln!(file, "use super::EffectInfo;\n")?;
-        
+
 //         writeln!(file, "#[derive(Deserialize, Serialize, Type, Clone, Debug)]")?;
 //         writeln!(file, "#[serde(tag = \"type\", content = \"config\")]")?;
 //         writeln!(file, "pub enum EffectConfig {{")?;
@@ -101,7 +101,7 @@
 //         }
 //         writeln!(file, "        _ => Err(format!(\"Schema not found for effect: {{}}\", effect_id)),")?;
 //         writeln!(file, "    }}\n}}\n")?;
-        
+
 //         writeln!(file, "pub fn create_effect(config: EffectConfig) -> Box<dyn effects::Effect> {{")?;
 //         writeln!(file, "    match config {{")?;
 //         for effect in &effects {
@@ -110,7 +110,7 @@
 //         }
 //         writeln!(file, "    }}\n}}")?;
 //     }
-    
+
 //     tauri_build::build();
 //     Ok(())
 // }

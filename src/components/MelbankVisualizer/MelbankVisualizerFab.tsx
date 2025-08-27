@@ -1,7 +1,8 @@
 import { useStore } from "../../store/useStore";
 import { Equalizer } from "@mui/icons-material";
-import { Drawer, IconButton } from "@mui/material";
+import { Drawer } from "@mui/material";
 import MelbankVisualizer from "./MelbankVisualizer";
+import IconBtn from "../IconBtn";
 
 /**
  * Floating action button for opening the settings drawer.
@@ -11,9 +12,7 @@ export function MelbankVisualizerFab() {
 
   return (
     <>
-        <IconButton onClick={() => setOpenMelbankVisualizer(true)}>
-          <Equalizer />
-        </IconButton>
+        <IconBtn icon={<Equalizer />} text="Open Melbank Visualizer" onClick={() => setOpenMelbankVisualizer(true)} />
         <Drawer
           open={openMelbankVisualizer}
           onClose={() => setOpenMelbankVisualizer(false)}

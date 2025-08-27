@@ -7,6 +7,8 @@ import { MelbankVisualizerFab } from './MelbankVisualizer/MelbankVisualizerFab';
 import DevTools from './DevTools';
 import { checkEnvironment, isDev } from '../utils/environment';
 import { useEffect } from 'react';
+import { ImportExportButtons } from './ImportExportButtons';
+import IconBtn from './IconBtn';
 
 export const GlobalControls = () => {
   const { playbackState } = useStore();
@@ -23,9 +25,8 @@ export const GlobalControls = () => {
     <Box>
       
       {isDev() && <DevTools />}
-      <IconButton onClick={handleTogglePause}>
-        {playbackState.is_paused ? <PlayArrow /> : <Pause />}
-      </IconButton>
+      <ImportExportButtons />
+      <IconBtn icon={playbackState.is_paused ? <PlayArrow /> : <Pause />} text={playbackState.is_paused ? "Play" : "Pause"} onClick={handleTogglePause} />
       <MelbankVisualizerFab />
       <SettingsFab />
     </Box>

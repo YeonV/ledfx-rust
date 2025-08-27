@@ -5,6 +5,7 @@ import { useStore } from "../store/useStore";
 import { Wled } from "./Icons/Icons";
 import { Box, LinearProgress, Button, Alert, IconButton } from "@mui/material";
 import type { WledDevice, Device } from "../bindings";
+import IconBtn from "./IconBtn";
 
 export function WledDiscoverer() {
   const {
@@ -63,8 +64,6 @@ export function WledDiscoverer() {
   }, [duration, setIsScanning, setError]);
 
   return (
-   <IconButton onClick={handleDiscover} disabled={isScanning}>
-      <Wled width={20} scan={isScanning} />
-    </IconButton>
+    <IconBtn text="Discover WLED" onClick={handleDiscover} disabled={isScanning} icon={<Wled width={20} scan={isScanning} />} />
   );
 }

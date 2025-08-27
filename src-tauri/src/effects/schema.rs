@@ -1,7 +1,7 @@
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use specta::Type;
 
-#[derive(Serialize, Type, Clone)]
+#[derive(Serialize, Deserialize, Type, Clone, Debug)]
 #[serde(untagged)]
 pub enum DefaultValue {
     String(String),
