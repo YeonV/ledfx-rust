@@ -17,16 +17,26 @@ export function WledDiscoverer() {
 
   useEffect(() => {
     const setupAudio = async () => {
-      const result = await commands.getAudioDevices();
-      if (result.status === "ok") {
-        setAudioDevices(result.data);
-        if (result.data.length > 0) {
-          const defaultDevice = result.data[0].name;
-          setSelectedAudioDevice(defaultDevice);
-          await commands.setAudioDevice(defaultDevice);
+      try {
+        // --- START: THE NEW LOGIC ---
+        const result = await commands.getAudioDevices();
+        if (result.status === "ok") {
+          const { devices, default_device_name } = result.data;
+          setAudioDevices(devices);
+
+          // Use the intelligent default from the backend, with fallbacks
+          const deviceToSelect = default_device_name || devices[0]?.name;
+
+          if (deviceToSelect) {
+            setSelectedAudioDevice(deviceToSelect);
+            await commands.setAudioDevice(deviceToSelect);
+          }
+        } else {
+          setError(result.error as string);
         }
-      } else {
-        setError(result.error as string);
+        // --- END: THE NEW LOGIC ---
+      } catch (e) {
+        setError(e as string);
       }
     };
 

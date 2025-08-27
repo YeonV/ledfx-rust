@@ -9,6 +9,7 @@ pub struct DspSettings {
     pub smoothing_factor: f32,
     pub agc_attack: f32,
     pub agc_decay: f32,
+    pub audio_delay_ms: u32,
 }
 
 impl Default for DspSettings {
@@ -17,6 +18,7 @@ impl Default for DspSettings {
             smoothing_factor: 0.4,
             agc_attack: 0.01,
             agc_decay: 0.1,
+            audio_delay_ms: 0,
         }
     }
 }
@@ -27,6 +29,12 @@ pub struct SharedDspSettings(pub Arc<Mutex<DspSettings>>);
 #[derive(Serialize, Clone, Type)]
 pub struct AudioDevice {
     pub name: String,
+}
+
+#[derive(Serialize, Type, Clone)]
+pub struct AudioDevicesInfo {
+    pub devices: Vec<AudioDevice>,
+    pub default_device_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type, Default)]
@@ -125,11 +133,12 @@ pub fn update_dsp_settings(
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
+pub fn get_audio_devices() -> Result<AudioDevicesInfo, String> {
     #[cfg(not(target_os = "android"))]
-    return devices::get_desktop_devices_impl();
+    return desktop::get_desktop_devices_impl();
     #[cfg(target_os = "android")]
-    return Ok(android::get_android_devices());
+    // Placeholder for Android
+    return Ok(AudioDevicesInfo { devices: vec![], default_device_name: None });
 }
 
 #[tauri::command]

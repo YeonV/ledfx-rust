@@ -8,7 +8,6 @@ const DspSettings = () => {
   const [settings, setSettings] = useState<DspSettings | null>(null);
 
   useEffect(() => {
-    // Fetch initial settings when the component mounts
     const fetchSettings = async () => {
       try {
         const result = await commands.getDspSettings();
@@ -24,7 +23,7 @@ const DspSettings = () => {
     if (!settings) return;
     const newSettings = { ...settings, [field]: value };
     setSettings(newSettings);
-    commands.updateDspSettings(newSettings); // Send update to backend
+    commands.updateDspSettings(newSettings);
   };
 
   if (!settings) {
@@ -65,6 +64,16 @@ const DspSettings = () => {
           min={0.001}
           max={0.2}
       />
+    </SettingsRow>
+    <SettingsRow icon={<SouthEast />} title={`Audio Delay (ms): ${settings.audio_delay_ms}`}>
+        <Slider
+          value={settings.audio_delay_ms}
+          onChange={(_e, newValue) => handleSettingChange('audio_delay_ms', newValue as number)}
+          min={0}
+          max={500}
+          step={10}
+          valueLabelDisplay="auto"
+        />
     </SettingsRow>
     </>
   );

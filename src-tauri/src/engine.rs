@@ -4,6 +4,7 @@ use crate::store;
 use crate::types::{Device, MatrixCell, Virtual};
 use crate::utils::{colors, ddp, dsp};
 use serde::Serialize;
+use serde_json::Value;
 use specta::Type;
 #[cfg(debug_assertions)]
 use std::collections::hash_map;
@@ -315,10 +316,7 @@ pub fn run_effect_engine(
                 } => {
                     if let Some(active_virtual) = virtuals.get_mut(&virtual_id) {
                         if let Some(effect) = &mut active_virtual.effect {
-                            let config_value = match settings {
-                                EffectConfig::BladePower(c) => serde_json::to_value(c).unwrap(),
-                                EffectConfig::Scan(c) => serde_json::to_value(c).unwrap(),
-                            };
+                            let config_value = config_to_value(settings);
                             effect.update_config(config_value);
                         }
                     }

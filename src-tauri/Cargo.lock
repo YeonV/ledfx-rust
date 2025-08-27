@@ -2054,6 +2054,7 @@ dependencies = [
  "lazy_static",
  "mdns-sd",
  "once_cell",
+ "rand 0.8.5",
  "regex",
  "reqwest",
  "rustfft",

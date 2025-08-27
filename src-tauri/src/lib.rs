@@ -66,6 +66,7 @@ fn configure_builder() -> Builder<tauri::Wry> {
         .typ::<engine::EffectConfig>()
         .typ::<blade_power::BladePowerConfig>()
         .typ::<scan::ScanConfig>()
+        .typ::<audio::AudioDevicesInfo>()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

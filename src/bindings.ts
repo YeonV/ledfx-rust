@@ -136,7 +136,7 @@ async getVirtuals() : Promise<Result<Virtual[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async getAudioDevices() : Promise<Result<AudioDevice[], string>> {
+async getAudioDevices() : Promise<Result<AudioDevicesInfo, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_audio_devices") };
 } catch (e) {
@@ -230,15 +230,17 @@ async triggerReload() : Promise<Result<null, string>> {
 
 export type AudioAnalysisData = { melbanks: number[] }
 export type AudioDevice = { name: string }
+export type AudioDevicesInfo = { devices: AudioDevice[]; default_device_name: string | null }
 export type BaseEffectConfig = { mirror: boolean; flip: boolean; blur: number; background_color: string }
 export type BladePowerConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { decay: number; multiplier: number; frequency_range: string; gradient: string }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean
 export type Device = { ip_address: string; name: string; led_count: number }
-export type DspSettings = { smoothing_factor: number; agc_attack: number; agc_decay: number }
-export type EffectConfig = { type: "blade_power"; config: BladePowerConfig } | { type: "scan"; config: ScanConfig }
+export type DspSettings = { smoothing_factor: number; agc_attack: number; agc_decay: number; audio_delay_ms: number }
+export type EffectConfig = { type: "blade_power"; config: BladePowerConfig } | { type: "fire"; config: FireConfig } | { type: "scan"; config: ScanConfig }
 export type EffectInfo = { id: string; name: string }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
+export type FireConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { cooling: number; sparking: number; gradient: string }
 export type LedsInfo = { count: number }
 export type MapInfo = { id: number }
 export type MatrixCell = { device_id: string; pixel: number }

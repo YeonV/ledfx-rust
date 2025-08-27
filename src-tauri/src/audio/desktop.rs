@@ -1,4 +1,4 @@
-use super::{AudioAnalysisData, AudioCommand, AudioDevice, DspSettings};
+use super::{AudioAnalysisData, AudioCommand, AudioDevice, AudioDevicesInfo, DspSettings};
 use crate::utils::dsp::generate_mel_filterbank;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream, SupportedStreamConfig};
@@ -7,36 +7,80 @@ use rustfft::FftPlanner;
 use std::f32::consts::PI;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
+use std::collections::VecDeque;
 
 const FFT_SIZE: usize = 1024;
 const NUM_BANDS: usize = 128;
 const MIN_FREQ: f32 = 20.0;
 const MAX_FREQ: f32 = 18000.0;
 
-pub fn get_desktop_devices() -> Result<Vec<AudioDevice>, String> {
+pub fn get_desktop_devices_impl() -> Result<AudioDevicesInfo, String> {
     let host = cpal::default_host();
-    let mut device_list: Vec<AudioDevice> = Vec::new();
+    let mut input_devices: Vec<AudioDevice> = Vec::new();
+    let mut loopback_devices: Vec<AudioDevice> = Vec::new();
+
+    // 1. Get all physical input devices (microphones)
     if let Ok(devices) = host.input_devices() {
         for device in devices {
             if let Ok(name) = device.name() {
-                device_list.push(AudioDevice { name });
+                input_devices.push(AudioDevice { name });
             }
         }
     }
+
+    // 2. Create our virtual loopback devices from physical output devices
     #[cfg(target_os = "windows")]
     {
         if let Ok(devices) = host.output_devices() {
             for device in devices {
                 if let Ok(name) = device.name() {
                     let loopback_name = format!("System Audio ({})", name);
-                    device_list.push(AudioDevice {
-                        name: loopback_name,
-                    });
+                    loopback_devices.push(AudioDevice { name: loopback_name });
                 }
             }
         }
     }
-    Ok(device_list)
+
+    // 3. Intelligently determine the best default device
+    let mut default_device_name: Option<String> = None;
+    if let Some(default_output) = host.default_output_device() {
+        if let Ok(target_name) = default_output.name() {
+            let target_loopback_name = format!("System Audio ({})", target_name);
+            // Try to find a perfect match
+            if let Some(device) = loopback_devices.iter().find(|d| d.name == target_loopback_name) {
+                default_device_name = Some(device.name.clone());
+            }
+        }
+    }
+
+    // Fallback 1: If no perfect match, find the first available loopback
+    if default_device_name.is_none() && !loopback_devices.is_empty() {
+        default_device_name = Some(loopback_devices[0].name.clone());
+    }
+
+    // Fallback 2: If still no loopback, use the default system input
+    if default_device_name.is_none() {
+        if let Some(default_input) = host.default_input_device() {
+            if let Ok(name) = default_input.name() {
+                if input_devices.iter().any(|d| d.name == name) {
+                    default_device_name = Some(name);
+                }
+            }
+        }
+    }
+    
+    // Fallback 3: If all else fails, just pick the first input device
+    if default_device_name.is_none() && !input_devices.is_empty() {
+        default_device_name = Some(input_devices[0].name.clone());
+    }
+
+    let mut all_devices = loopback_devices;
+    all_devices.extend(input_devices);
+
+    Ok(AudioDevicesInfo {
+        devices: all_devices,
+        default_device_name,
+    })
 }
 
 pub fn set_desktop_device(
@@ -137,11 +181,24 @@ fn build_and_play_stream(
     let mut smoothed_melbanks = vec![0.0; NUM_BANDS];
     let mut peak_energy = 1.0;
 
+    let mut delay_buffer: VecDeque<f32> = VecDeque::new();
+
     let data_callback = move |data: &[f32], _: &cpal::InputCallbackInfo| {
         let settings = dsp_settings.lock().unwrap();
 
+        let delay_samples = (settings.audio_delay_ms as f32 / 1000.0 * sample_rate as f32) as usize;
+        
         for frame in data.chunks(channels as usize) {
-            audio_samples.push(frame.iter().sum::<f32>() / channels as f32);
+            let sample = frame.iter().sum::<f32>() / channels as f32;
+            delay_buffer.push_back(sample);
+        }
+
+        while delay_buffer.len() > delay_samples {
+            if let Some(delayed_sample) = delay_buffer.pop_front() {
+                audio_samples.push(delayed_sample);
+            } else {
+                break;
+            }
         }
 
         while audio_samples.len() >= FFT_SIZE {
