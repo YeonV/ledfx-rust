@@ -31,18 +31,15 @@ export function EffectSettings({ schema, settings, onSettingChange, effectId, on
   const { presetCache, setPresetsForEffect } = useStore();
   const presets = presetCache[effectId];
 
-useEffect(() => {
-    console.log(`[EffectSettings] Effect hook running for effectId: ${effectId}`);
+  useEffect(() => {
     if (effectId && !presets) {
-        console.log(`[EffectSettings] Cache miss. Fetching presets for ${effectId}...`);
         commands.loadPresets(effectId).then(result => {
-            console.log(`[EffectSettings] Got result for ${effectId}:`, result);
             if (result.status === 'ok') {
-                setPresetsForEffect(effectId, result.data);
+                setPresetsForEffect(effectId, result.data as PresetCollection);
             }
         }).catch(console.error);
     }
-}, [effectId, presets, setPresetsForEffect]);
+  }, [effectId, presets, setPresetsForEffect]);
 
   const sortedSchema = [...schema].sort((a, b) => {
     const priorityA = getSortPriority(a);
@@ -54,6 +51,7 @@ useEffect(() => {
     <Box>
         <PresetManager
             presets={presets}
+            settings={settings} // <-- Pass the current settings down
             onLoad={onPresetLoad}
             onSave={onPresetSave}
             onDelete={onPresetDelete}
@@ -103,7 +101,7 @@ useEffect(() => {
                 return (
                 <FormControl fullWidth size="small" key={setting.id} sx={{ mt: 2 }}>
                     <InputLabel>{setting.name}</InputLabel>
-                    <Select
+                    <Select                    
                     label={setting.name}
                     value={String(value)}
                     onChange={(e) => onSettingChange(setting.id, e.target.value)}
