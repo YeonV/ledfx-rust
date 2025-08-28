@@ -60,7 +60,7 @@ export const SettingsActions = () => {
       }
     }
   };
-  const handleImport = () => {
+    const handleImport = () => {
     setError(null);
     const input = document.createElement('input');
     input.type = 'file';
@@ -74,16 +74,31 @@ export const SettingsActions = () => {
       reader.onload = async (event) => {
         try {
           const fileContent = event.target?.result as string;
-          
-          // 1. Send the imported file content to the Rust backend.
-          const result = await commands.importSettings(fileContent);
-          
-          if (result.status === 'ok') {
-            // 2. Tell the engine to reload its state from the file we just overwrote.
-            // The `virtuals-changed` and `devices-changed` events will handle the UI update.
-            await commands.triggerReload();
-          } else {
-            setError(result.error);
+          // 1. Parse the full imported configuration from the file content
+          const importedData = JSON.parse(fileContent);
+
+          // 2. Handle the engine state
+          if (importedData.engine_state) {
+            // Create a new string containing ONLY the engine_state part.
+            const engineStateString = JSON.stringify(importedData.engine_state);
+
+            // Send ONLY the engine state to the backend command.
+            const result = await commands.importSettings(engineStateString);
+            
+            if (result.status === 'ok') {
+              // Tell the engine to reload its state. It will emit events
+              // to update the frontend's devices, virtuals, etc.
+              await commands.triggerReload();
+            } else {
+              setError(result.error);
+              return; // Stop if the backend fails
+            }
+          }
+
+          // 3. Handle the frontend state
+          if (importedData.frontend_state) {
+            // Directly update the Zustand store with the frontend-specific settings.
+            useStore.setState(importedData.frontend_state);
           }
         } catch (err) {
           setError(err as string);
@@ -95,22 +110,39 @@ export const SettingsActions = () => {
     
     input.click();
   };
- const handleConfirmClear = async () => {
-    setIsConfirmOpen(false); // Close the dialog first
+
+const handleConfirmClear = async () => {
+    setIsConfirmOpen(false);
     setError(null);
     try {
-      const emptyState = JSON.stringify({ devices: {}, virtuals: {} });
-      const result = await commands.importSettings(emptyState);
+      const defaultStateResult = await commands.getDefaultEngineState();
+      
+      if (defaultStateResult.status === 'ok') {
+        const defaultState = defaultStateResult.data;
+        
+        const emptyStatePayload = {
+          devices: {},
+          virtuals: {},
+          dsp_settings: defaultState.dsp_settings
+        };
+        
+        const importResult = await commands.importSettings(JSON.stringify(emptyStatePayload));
 
-      if (result.status === 'ok') {
-        await commands.triggerReload();
+        if (importResult.status === 'ok') {
+          await commands.triggerReload();
+          useStore.setState({ selectedEffects: {}, effectSettings: {} });
+        } else {
+          setError(importResult.error);
+        }
       } else {
-        setError(result.error);
+        setError(defaultStateResult.error);
       }
     } catch (e) {
       setError(e as string);
     }
   };
+
+
 
   return (
     <>

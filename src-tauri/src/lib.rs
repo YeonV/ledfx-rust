@@ -48,6 +48,11 @@ fn configure_builder() -> Builder<tauri::Wry> {
             store::import_settings,
             engine::trigger_reload,
             engine::update_dsp_settings,
+            store::get_default_engine_state,
+            // --- START: NEW COMMANDS (Master Plan v2.2) ---
+            engine::restart_audio_capture,
+            utils::dsp::calculate_center_frequencies
+            // --- END: NEW COMMANDS ---
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()
@@ -57,6 +62,11 @@ fn configure_builder() -> Builder<tauri::Wry> {
         .typ::<wled::MapInfo>()
         .typ::<audio::AudioDevice>()
         .typ::<audio::DspSettings>()
+        // --- START: NEW TYPES (Master Plan v2.2) ---
+        .typ::<utils::dsp::FilterbankType>()
+        .typ::<utils::dsp::BladePlusParams>()
+        // --- END: NEW TYPES ---
+        .typ::<store::EngineState>()
         .typ::<effects::schema::EffectSetting>()
         .typ::<effects::schema::Control>()
         .typ::<effects::BaseEffectConfig>()

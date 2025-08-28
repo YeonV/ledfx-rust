@@ -83,7 +83,7 @@ export const useStore = create<IStore>()(
       name: 'ledfx-store',
       partialize: (state) =>
         Object.fromEntries(
-          Object.entries(state).filter(([key]) => ['selectedAudioDevice'].includes(key))
+          Object.entries(state).filter(([key]) => ['selectedAudioDevice', 'selectedEffects', 'effectSettings'].includes(key))
         ),
     },
   )

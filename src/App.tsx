@@ -5,7 +5,7 @@ import { Virtuals } from "./components/Virtuals";
 import { commands, type Virtual, type Device, PlaybackState, DspSettings } from "./bindings";
 import { useStore } from "./store/useStore";
 import { Alert } from "@mui/material";
-import { ConfigProvider } from "./components/ConfigProvider";
+import { ConfigDrop } from "./components/ConfigDrop";
 import TopBar from "./components/TopBar/TopBar";
 import "./App.css";
 
@@ -62,17 +62,14 @@ function App() {
   }, [setAvailableEffects, setVirtuals, setDevices]);
 
   return (
-  
-    <ConfigProvider>
-      
-      <TopBar/>
-      
+    <>
+      <ConfigDrop />
+      <TopBar />
       {error && (<Alert severity="error" sx={{ mt: 2, mb: 2 }}>{error}</Alert>)}
-
       <main style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', overflowY: 'auto' }}>
         {virtuals.length > 0 && <Virtuals />}     
       </main>
-    </ConfigProvider>
+    </>
   );
 }
 

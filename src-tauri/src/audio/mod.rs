@@ -1,11 +1,21 @@
+use crate::utils::dsp::{BladePlusParams, FilterbankType};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
 
-// --- START: NEW DSP SETTINGS ---
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DspSettings {
+    // Critical Settings (require audio stream restart)
+    pub fft_size: u32,
+    pub num_bands: u32,
+    pub min_freq: f32,
+    pub max_freq: f32,
+    pub filterbank_type: FilterbankType,
+    pub sample_rate: Option<u32>,
+    pub blade_plus_params: Option<BladePlusParams>,
+
+    // Live Settings (can be changed on the fly)
     pub smoothing_factor: f32,
     pub agc_attack: f32,
     pub agc_decay: f32,
@@ -15,6 +25,17 @@ pub struct DspSettings {
 impl Default for DspSettings {
     fn default() -> Self {
         Self {
+            fft_size: 4096,
+            num_bands: 24,
+            min_freq: 20.0,
+            max_freq: 15000.0,
+            filterbank_type: FilterbankType::Blade,
+            sample_rate: Some(30000),
+            blade_plus_params: Some(BladePlusParams {
+                log_base: 12.0,
+                multiplier: 3700.0,
+                divisor: 230.0,
+            }),
             smoothing_factor: 0.4,
             agc_attack: 0.01,
             agc_decay: 0.1,
@@ -94,11 +115,11 @@ pub struct SharedAudioData(pub Arc<Mutex<AudioAnalysisData>>);
 pub mod android;
 #[cfg(not(target_os = "android"))]
 pub mod desktop;
-pub mod devices;
 
 pub enum AudioCommand {
     ChangeDevice(String),
     UpdateSettings(DspSettings),
+    RestartStream,
 }
 
 pub fn start_audio_capture(
@@ -111,8 +132,6 @@ pub fn start_audio_capture(
     #[cfg(target_os = "android")]
     android::run_android_capture(command_rx, audio_data);
 }
-
-// --- TAURI COMMANDS ---
 
 #[tauri::command]
 #[specta::specta]
@@ -127,8 +146,10 @@ pub fn get_audio_devices() -> Result<AudioDevicesInfo, String> {
     #[cfg(not(target_os = "android"))]
     return desktop::get_desktop_devices_impl();
     #[cfg(target_os = "android")]
-    // Placeholder for Android
-    return Ok(AudioDevicesInfo { devices: vec![], default_device_name: None });
+    return Ok(AudioDevicesInfo {
+        devices: vec![],
+        default_device_name: None,
+    });
 }
 
 #[tauri::command]
@@ -138,9 +159,9 @@ pub fn set_audio_device(
     command_tx: State<mpsc::Sender<AudioCommand>>,
 ) -> Result<(), String> {
     #[cfg(not(target_os = "android"))]
-    return devices::set_desktop_device_impl(device_name, command_tx);
+    return crate::audio::desktop::set_desktop_device_impl(device_name, command_tx);
     #[cfg(target_os = "android")]
-    return android::set_android_device(device_name, command_tx);
+    return Ok(());
 }
 
 #[tauri::command]

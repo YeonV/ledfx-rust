@@ -38,6 +38,8 @@ tauri-plugin-store = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 rand = "0.8.5"
+dasp = { version = "0.11.0", features = ["interpolate", "signal", "interpolate-linear"] }
+dasp_sample = "0.11.0"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = { version = "0.21.1", features = ["invocation"] }

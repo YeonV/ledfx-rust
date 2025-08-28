@@ -1,22 +1,18 @@
 use crate::audio::DspSettings;
-use crate::effects::schema::DefaultValue;
 use crate::types::{Device, Virtual};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
+use specta::Type;
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Type)]
 pub struct EngineState {
     #[serde(default)]
     pub devices: HashMap<String, Device>,
     #[serde(default)]
     pub virtuals: HashMap<String, Virtual>,
-    #[serde(default)]
-    pub selected_effects: HashMap<String, String>,
-    #[serde(default)]
-    pub effect_settings: HashMap<String, HashMap<String, DefaultValue>>,
     #[serde(default)]
     pub dsp_settings: DspSettings,
 }
@@ -39,6 +35,14 @@ pub fn save_engine_state(app_handle: &AppHandle, engine_state: &EngineState) {
     let path = get_settings_path(app_handle);
     let json_string = serde_json::to_string_pretty(engine_state).unwrap();
     fs::write(path, json_string).expect("Failed to write to settings file");
+}
+
+#[tauri::command]
+#[specta::specta]
+// Change the return type to a Result
+pub fn get_default_engine_state() -> Result<EngineState, String> {
+    // Wrap the return value in Ok()
+    Ok(EngineState::default())
 }
 
 #[tauri::command]

@@ -199,6 +199,30 @@ async updateDspSettings(settings: DspSettings) : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async getDefaultEngineState() : Promise<Result<EngineState, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_default_engine_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async restartAudioCapture() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("restart_audio_capture") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async calculateCenterFrequencies(numBands: number, minFreq: number, maxFreq: number, filterType: FilterbankType) : Promise<Result<number[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("calculate_center_frequencies", { numBands, minFreq, maxFreq, filterType }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -216,14 +240,17 @@ export type AudioAnalysisData = { melbanks: number[] }
 export type AudioDevice = { name: string }
 export type AudioDevicesInfo = { devices: AudioDevice[]; default_device_name: string | null }
 export type BaseEffectConfig = { mirror: boolean; flip: boolean; blur: number; background_color: string }
+export type BladePlusParams = { log_base: number; multiplier: number; divisor: number }
 export type BladePowerConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { decay: number; multiplier: number; frequency_range: string; gradient: string }
 export type Control = { type: "slider"; min: number; max: number; step: number } | { type: "checkbox" } | { type: "colorPicker" } | { type: "select"; options: string[] }
 export type DefaultValue = string | number | boolean
 export type Device = { ip_address: string; name: string; led_count: number }
-export type DspSettings = { smoothing_factor: number; agc_attack: number; agc_decay: number; audio_delay_ms: number }
+export type DspSettings = { fft_size: number; num_bands: number; min_freq: number; max_freq: number; filterbank_type: FilterbankType; sample_rate: number | null; blade_plus_params: BladePlusParams | null; smoothing_factor: number; agc_attack: number; agc_decay: number; audio_delay_ms: number }
 export type EffectConfig = { type: "blade_power"; config: BladePowerConfig } | { type: "fire"; config: FireConfig } | { type: "scan"; config: ScanConfig }
 export type EffectInfo = { id: string; name: string }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
+export type EngineState = { devices?: Partial<{ [key in string]: Device }>; virtuals?: Partial<{ [key in string]: Virtual }>; dsp_settings?: DspSettings }
+export type FilterbankType = "Balanced" | "Precision" | "Vocal" | "Blade" | { BladePlus: BladePlusParams }
 export type FireConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { cooling: number; sparking: number; gradient: string }
 export type LedsInfo = { count: number }
 export type MapInfo = { id: number }
