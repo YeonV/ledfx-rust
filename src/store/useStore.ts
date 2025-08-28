@@ -98,9 +98,7 @@ export const useStore = create<IStore>()(
       partialize: (state) =>
         Object.fromEntries(
           Object.entries(state).filter(([key]) => [
-            'selectedAudioDevice', 
-            'selectedEffects', 
-            'effectSettings',
+            'selectedAudioDevice',
             'dirtyDspSettings', // <-- Add this
           ].includes(key))
         ),

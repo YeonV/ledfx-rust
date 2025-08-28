@@ -14,7 +14,6 @@ use tauri::{AppHandle, Emitter, State};
 mod generated;
 pub use generated::*;
 
-
 struct ActiveVirtual {
     effect: Option<Box<dyn Effect>>,
     config: Virtual,
@@ -44,41 +43,17 @@ pub enum EngineRequest {
 }
 
 pub enum EngineCommand {
-    StartEffect {
-        virtual_id: String,
-        config: EffectConfig,
-    },
-    StopEffect {
-        virtual_id: String,
-    },
-    UpdateSettings {
-        virtual_id: String,
-        settings: EffectConfig,
-    },
-    AddVirtual {
-        config: Virtual,
-    },
-    UpdateVirtual {
-        config: Virtual,
-    },
-    RemoveVirtual {
-        virtual_id: String,
-    },
-    AddDevice {
-        config: Device,
-    },
-    RemoveDevice {
-        device_ip: String,
-    },
-    SetTargetFps {
-        fps: u32,
-    },
-    UpdateDspSettings {
-        settings: DspSettings,
-    },
-    // --- START: NEW COMMAND (Master Plan v2.2) ---
+    StartEffect { virtual_id: String, config: EffectConfig, },
+    StopEffect { virtual_id: String, },
+    UpdateSettings { virtual_id: String, settings: EffectConfig, },
+    AddVirtual { config: Virtual, },
+    UpdateVirtual { config: Virtual, },
+    RemoveVirtual { virtual_id: String, },
+    AddDevice { config: Device, },
+    RemoveDevice { device_ip: String, },
+    SetTargetFps { fps: u32, },
+    UpdateDspSettings { settings: DspSettings, },
     RestartAudioCapture,
-    // --- END: NEW COMMAND ---
     TogglePause,
     ReloadState,
 }
@@ -87,9 +62,7 @@ pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);
 
 fn emit_virtuals_update(virtuals: &HashMap<String, ActiveVirtual>, app_handle: &AppHandle) {
     let virtual_configs: Vec<Virtual> = virtuals.values().map(|v| v.config.clone()).collect();
-    app_handle
-        .emit("virtuals-changed", &virtual_configs)
-        .unwrap();
+    app_handle.emit("virtuals-changed", &virtual_configs).unwrap();
 }
 
 fn emit_devices_update(devices: &HashMap<String, Device>, app_handle: &AppHandle) {
@@ -97,9 +70,7 @@ fn emit_devices_update(devices: &HashMap<String, Device>, app_handle: &AppHandle
     app_handle.emit("devices-changed", &device_list).unwrap();
 }
 fn emit_playback_state_update(is_paused: bool, app_handle: &AppHandle) {
-    app_handle
-        .emit("playback-state-changed", &PlaybackState { is_paused })
-        .unwrap();
+    app_handle.emit("playback-state-changed", &PlaybackState { is_paused }).unwrap();
 }
 
 pub fn run_effect_engine(
@@ -110,31 +81,29 @@ pub fn run_effect_engine(
     app_handle: AppHandle,
 ) {
     let mut engine_state = store::load_engine_state(&app_handle);
+    
+    // --- START: SIMPLIFIED STARTUP LOGIC ---
+    // The logic is now simple: what's in the file is the truth.
     let mut virtuals: HashMap<String, ActiveVirtual> = engine_state
         .virtuals
         .into_iter()
         .map(|(id, config)| {
-            let pixel_count = config
-                .matrix_data
-                .iter()
-                .flat_map(|row| row.iter())
-                .filter(|cell| cell.is_some())
-                .count();
-            (
-                id,
-                ActiveVirtual {
-                    effect: None,
-                    config,
-                    pixel_count,
-                    r_channel: vec![0.0; pixel_count],
-                    g_channel: vec![0.0; pixel_count],
-                    b_channel: vec![0.0; pixel_count],
-                },
-            )
+            let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
+            (id, ActiveVirtual {
+                effect: None,
+                config,
+                pixel_count,
+                r_channel: vec![0.0; pixel_count],
+                g_channel: vec![0.0; pixel_count],
+                b_channel: vec![0.0; pixel_count],
+            })
         })
         .collect();
     let mut devices = engine_state.devices;
+    // --- END: SIMPLIFIED STARTUP LOGIC ---
+
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+    socket.set_nonblocking(true).expect("Failed to set non-blocking socket");
     let mut frame_count: u8 = 0;
     let mut target_frame_duration = Duration::from_millis(1000 / 60);
     let mut is_paused = false;
@@ -144,8 +113,7 @@ pub fn run_effect_engine(
         if let Ok(request) = request_rx.try_recv() {
             match request {
                 EngineRequest::GetVirtuals(responder) => {
-                    let virtual_configs: Vec<Virtual> =
-                        virtuals.values().map(|v| v.config.clone()).collect();
+                    let virtual_configs: Vec<Virtual> = virtuals.values().map(|v| v.config.clone()).collect();
                     responder.send(virtual_configs).unwrap();
                 }
                 EngineRequest::GetDevices(responder) => {
@@ -175,56 +143,22 @@ pub fn run_effect_engine(
                     app_handle.emit("dsp-settings-changed", &settings).unwrap();
                     should_save_state = true;
                 }
-                // --- START: MODIFIED RELOADSTATE (Master Plan v2.2) ---
+                // --- START: SIMPLIFIED RELOADSTATE ---
                 EngineCommand::ReloadState => {
                     println!("[ENGINE] Reloading state from disk.");
                     engine_state = store::load_engine_state(&app_handle);
-
-                    // First, load the custom virtuals from the state file
-                    let mut reloaded_virtuals: HashMap<String, ActiveVirtual> = engine_state
-                        .virtuals
-                        .iter()
-                        .filter(|(_, v)| v.is_device.is_none()) 
-                        .map(|(id, config)| {
+                    // The logic is now the same simple logic as startup.
+                    virtuals = engine_state.virtuals.into_iter().map(|(id, config)| {
                             let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-                            (id.clone(), ActiveVirtual {
-                                effect: None,
-                                config: config.clone(),
-                                pixel_count,
+                            (id, ActiveVirtual {
+                                effect: None, config, pixel_count,
                                 r_channel: vec![0.0; pixel_count],
                                 g_channel: vec![0.0; pixel_count],
                                 b_channel: vec![0.0; pixel_count],
                             })
-                        })
-                        .collect();
-
-                    // Second, load the devices and create fresh device-virtuals for them
-                    devices = engine_state.devices.clone();
-                    for (device_ip, device_config) in &devices {
-                        let virtual_id = format!("device_{}", device_ip);
-                        let matrix_data = vec![(0..device_config.led_count)
-                            .map(|i| Some(MatrixCell { device_id: device_ip.clone(), pixel: i }))
-                            .collect()];
-                        let device_virtual = Virtual {
-                            id: virtual_id.clone(),
-                            name: device_config.name.clone(),
-                            matrix_data,
-                            is_device: Some(device_ip.clone()),
-                        };
-                        let pixel_count = device_virtual.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-                        let active_virtual = ActiveVirtual {
-                            effect: None,
-                            config: device_virtual,
-                            pixel_count,
-                            r_channel: vec![0.0; pixel_count],
-                            g_channel: vec![0.0; pixel_count],
-                            b_channel: vec![0.0; pixel_count],
-                        };
-                        reloaded_virtuals.insert(virtual_id, active_virtual);
-                    }
+                        }).collect();
+                    devices = engine_state.devices;
                     
-                    virtuals = reloaded_virtuals;
-                    should_save_state = false; // We just loaded, no need to save immediately
                     emit_devices_update(&devices, &app_handle);
                     emit_virtuals_update(&virtuals, &app_handle);
                     app_handle.emit("dsp-settings-changed", &engine_state.dsp_settings).unwrap();
@@ -238,6 +172,7 @@ pub fn run_effect_engine(
                 EngineCommand::AddDevice { config } => {
                     let device_ip = config.ip_address.clone();
                     devices.insert(device_ip.clone(), config.clone());
+                    // This is the ONLY place a device-virtual is "auto-created".
                     let virtual_id = format!("device_{}", device_ip);
                     let matrix_data = vec![(0..config.led_count)
                         .map(|i| { Some(MatrixCell { device_id: device_ip.clone(), pixel: i }) })
@@ -249,11 +184,8 @@ pub fn run_effect_engine(
                         is_device: Some(device_ip.clone()),
                     };
                     let pixel_count = device_virtual.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-                    virtuals.insert(virtual_id,
-                        ActiveVirtual {
-                            effect: None,
-                            config: device_virtual,
-                            pixel_count,
+                    virtuals.insert(virtual_id, ActiveVirtual {
+                            effect: None, config: device_virtual, pixel_count,
                             r_channel: vec![0.0; pixel_count],
                             g_channel: vec![0.0; pixel_count],
                             b_channel: vec![0.0; pixel_count],
@@ -266,7 +198,7 @@ pub fn run_effect_engine(
                 EngineCommand::RemoveDevice { device_ip } => {
                     devices.remove(&device_ip);
                     let virtual_id = format!("device_{}", device_ip);
-                    virtuals.remove(&virtual_id);
+                    virtuals.remove(&virtual_id); // Also remove its virtual representation
                     should_save_state = true;
                     emit_devices_update(&devices, &app_handle);
                     emit_virtuals_update(&virtuals, &app_handle);
@@ -300,20 +232,21 @@ pub fn run_effect_engine(
                     emit_virtuals_update(&virtuals, &app_handle);
                 }
                 EngineCommand::RemoveVirtual { virtual_id } => {
-                    let mut should_save = false;
+                    let mut was_device_virtual = false;
                     if let Some(active_virtual) = virtuals.get(&virtual_id) {
                         if let Some(device_ip) = &active_virtual.config.is_device {
                             println!("[ENGINE] Removing device-virtual, also removing device: {}", device_ip);
                             devices.remove(device_ip);
                             emit_devices_update(&devices, &app_handle);
-                            should_save = true;
+                            was_device_virtual = true;
                         }
                     }
                     if virtuals.remove(&virtual_id).is_some() {
-                        if !should_save { should_save = true; }
                         emit_virtuals_update(&virtuals, &app_handle);
+                        should_save_state = true;
+                    } else if was_device_virtual {
+                        should_save_state = true;
                     }
-                    if should_save { should_save_state = true; }
                 }
                 EngineCommand::StartEffect { virtual_id, config } => {
                     if let Some(active_virtual) = virtuals.get_mut(&virtual_id) {
@@ -342,15 +275,16 @@ pub fn run_effect_engine(
         }
         if should_save_state {
             engine_state.devices = devices.clone();
-            let custom_virtuals: HashMap<String, Virtual> = virtuals
+            // --- START: THE CORE FIX - REMOVE THE FILTER ---
+            // Now we save ALL virtuals, including device-virtuals.
+            engine_state.virtuals = virtuals
                 .iter()
-                .filter(|(_, v)| v.config.is_device.is_none())
                 .map(|(id, v)| (id.clone(), v.config.clone()))
                 .collect();
-            engine_state.virtuals = custom_virtuals;
+            // --- END: THE CORE FIX ---
             store::save_engine_state(&app_handle, &engine_state);
         }
-
+        
         if !is_paused {
             let latest_audio_data = audio_data.inner().0.lock().unwrap().clone();
             frame_count = frame_count.wrapping_add(1);
