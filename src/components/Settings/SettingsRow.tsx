@@ -1,7 +1,7 @@
 import { Stack, Typography, Card, CardContent } from "@mui/material";
 
 export function SettingsRow({ icon, title, children }: {
-    icon: React.ReactNode;
+    icon?: React.ReactNode;
     title: string;
     children: React.ReactNode;
 }) {

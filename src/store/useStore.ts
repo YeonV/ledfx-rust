@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware'
-import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings  } from '../bindings';
+import { persist } from 'zustand/middleware';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings } from '../bindings';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
@@ -37,8 +37,13 @@ type IStore = {
   setAvailableEffects: (effects: EffectInfo[]) => void;
   playbackState: PlaybackState;
   setPlaybackState: (state: PlaybackState) => void;
+  
+  // --- START: MODIFIED DSP STATE (Master Plan v2.2) ---
   dspSettings: DspSettings | null;
   setDspSettings: (settings: DspSettings) => void;
+  dirtyDspSettings: DspSettings | null;
+  setDirtyDspSettings: (settings: DspSettings) => void;
+  // --- END: MODIFIED DSP STATE ---
 }
 
 export const useStore = create<IStore>()(
@@ -76,14 +81,28 @@ export const useStore = create<IStore>()(
       setAvailableEffects: (effects) => set({ availableEffects: effects }),
       playbackState: { is_paused: false },
       setPlaybackState: (state) => set({ playbackState: state }),
+      
+      // --- START: MODIFIED DSP STATE (Master Plan v2.2) ---
       dspSettings: null,
-      setDspSettings: (settings) => set({ dspSettings: settings }),
+      // When the backend sends us the "true" settings, update both our truth and our editing copy.
+      setDspSettings: (settings) => set({ dspSettings: settings, dirtyDspSettings: settings }),
+      dirtyDspSettings: null,
+      // When the UI makes a change, only update the "dirty" copy.
+      setDirtyDspSettings: (settings) => set({ dirtyDspSettings: settings }),
+      // --- END: MODIFIED DSP STATE ---
     }),
     {
       name: 'ledfx-store',
+      // Persist the dirty settings so the user doesn't lose their edits on a refresh.
+      // Also continue persisting the other UI settings.
       partialize: (state) =>
         Object.fromEntries(
-          Object.entries(state).filter(([key]) => ['selectedAudioDevice', 'selectedEffects', 'effectSettings'].includes(key))
+          Object.entries(state).filter(([key]) => [
+            'selectedAudioDevice', 
+            'selectedEffects', 
+            'effectSettings',
+            'dirtyDspSettings', // <-- Add this
+          ].includes(key))
         ),
     },
   )

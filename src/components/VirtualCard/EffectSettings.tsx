@@ -26,6 +26,8 @@ export function EffectSettings({ schema, settings, onSettingChange }: EffectSett
     const priorityB = getSortPriority(b);
     return priorityA - priorityB; // This performs the comparison
   });
+
+  console.log('Sorted Schema:', sortedSchema);
   return (
 
     <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between' }}>
