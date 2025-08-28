@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings } from '../bindings';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings, PresetCollection } from '../bindings';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
+
+// --- START: NEW PRESET STATE TYPE ---
+// A cache for presets, keyed by effect ID
+type PresetCache = Record<string, PresetCollection>;
+// --- END: NEW PRESET STATE TYPE ---
 
 type IStore = {
   devices: Device[];
@@ -37,13 +42,15 @@ type IStore = {
   setAvailableEffects: (effects: EffectInfo[]) => void;
   playbackState: PlaybackState;
   setPlaybackState: (state: PlaybackState) => void;
-  
-  // --- START: MODIFIED DSP STATE (Master Plan v2.2) ---
   dspSettings: DspSettings | null;
   setDspSettings: (settings: DspSettings) => void;
   dirtyDspSettings: DspSettings | null;
   setDirtyDspSettings: (settings: DspSettings) => void;
-  // --- END: MODIFIED DSP STATE ---
+  
+  // --- START: NEW PRESET STATE ---
+  presetCache: PresetCache;
+  setPresetsForEffect: (effectId: string, presets: PresetCollection) => void;
+  // --- END: NEW PRESET STATE ---
 }
 
 export const useStore = create<IStore>()(
@@ -81,25 +88,29 @@ export const useStore = create<IStore>()(
       setAvailableEffects: (effects) => set({ availableEffects: effects }),
       playbackState: { is_paused: false },
       setPlaybackState: (state) => set({ playbackState: state }),
-      
-      // --- START: MODIFIED DSP STATE (Master Plan v2.2) ---
       dspSettings: null,
-      // When the backend sends us the "true" settings, update both our truth and our editing copy.
       setDspSettings: (settings) => set({ dspSettings: settings, dirtyDspSettings: settings }),
       dirtyDspSettings: null,
-      // When the UI makes a change, only update the "dirty" copy.
       setDirtyDspSettings: (settings) => set({ dirtyDspSettings: settings }),
-      // --- END: MODIFIED DSP STATE ---
+
+      // --- START: NEW PRESET STATE ---
+      presetCache: {},
+      setPresetsForEffect: (effectId, presets) => set((state) => ({
+        presetCache: { ...state.presetCache, [effectId]: presets }
+      })),
+      // --- END: NEW PRESET STATE ---
     }),
     {
       name: 'ledfx-store',
-      // Persist the dirty settings so the user doesn't lose their edits on a refresh.
-      // Also continue persisting the other UI settings.
+      // We are NOT persisting presets. They are fetched from the backend as needed.
+      // We DO persist the effect settings that a user has dialed in.
       partialize: (state) =>
         Object.fromEntries(
           Object.entries(state).filter(([key]) => [
             'selectedAudioDevice',
-            'dirtyDspSettings', // <-- Add this
+            'dirtyDspSettings',
+            // 'selectedEffects',
+            // 'effectSettings',
           ].includes(key))
         ),
     },

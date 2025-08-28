@@ -223,6 +223,30 @@ async calculateCenterFrequencies(numBands: number, minFreq: number, maxFreq: num
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async savePreset(effectId: string, presetName: string, settings: EffectConfig) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_preset", { effectId, presetName, settings }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deletePreset(effectId: string, presetName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_preset", { effectId, presetName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadPresets(effectId: string) : Promise<Result<PresetCollection, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_presets", { effectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -249,13 +273,14 @@ export type DspSettings = { fft_size: number; num_bands: number; min_freq: numbe
 export type EffectConfig = { type: "blade_power"; config: BladePowerConfig } | { type: "fire"; config: FireConfig } | { type: "scan"; config: ScanConfig }
 export type EffectInfo = { id: string; name: string }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
-export type EngineState = { devices?: Partial<{ [key in string]: Device }>; virtuals?: Partial<{ [key in string]: Virtual }>; dsp_settings?: DspSettings }
+export type EngineState = { devices?: Partial<{ [key in string]: Device }>; virtuals?: Partial<{ [key in string]: Virtual }>; dsp_settings?: DspSettings; effect_presets?: Partial<{ [key in string]: Partial<{ [key in string]: EffectConfig }> }> }
 export type FilterbankType = "Balanced" | "Precision" | "Vocal" | "Blade" | { BladePlus: BladePlusParams }
 export type FireConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { cooling: number; sparking: number; gradient: string }
 export type LedsInfo = { count: number }
 export type MapInfo = { id: number }
 export type MatrixCell = { device_id: string; pixel: number }
 export type PlaybackState = { is_paused: boolean }
+export type PresetCollection = { user: Partial<{ [key in string]: EffectConfig }>; built_in: Partial<{ [key in string]: EffectConfig }> }
 export type ScanConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { speed: number; width: number; gradient: string }
 export type Virtual = { id: string; name: string; matrix_data: ((MatrixCell | null)[])[]; is_device?: string | null }
 export type WledDevice = { ip_address: string; port: number; name: string; version: string; leds: LedsInfo; udp_port: number; architecture: string; maps: MapInfo[] }

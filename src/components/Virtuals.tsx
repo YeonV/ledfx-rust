@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { VirtualCard } from "./VirtualCard/VirtualCard";
 import { commands } from "../bindings";
 import { useStore } from "../store/useStore";
@@ -10,7 +10,7 @@ const buildConfigPayload = (effectId: string, settings: Record<string, any>, ava
     if (!effectInfo) return null;
 
     return {
-      type: effectInfo.id as any,
+      type: effectId as any,
       config: settings,
     } as EffectConfig;
 };
@@ -23,7 +23,13 @@ export function Virtuals() {
     effectSchemas, setEffectSchemas,
     effectSettings, setEffectSettings,
     availableEffects,
+    setPresetsForEffect, // For invalidating cache on change
   } = useStore();
+
+  useEffect(() => {
+    // This effect is now removed as per your new architecture decision.
+    // We will no longer auto-start effects.
+  }, []);
 
   const handleEffectSelection = useCallback(
     async (virtual: Virtual, newEffectId: string) => {
@@ -58,7 +64,7 @@ export function Virtuals() {
         }
       }
     },
-    [activeEffects, effectSchemas, effectSettings, selectedEffects]
+    [activeEffects, effectSchemas, effectSettings, selectedEffects, setEffectSchemas, setSelectedEffects, setEffectSettings]
   );
   
   const handleSettingsChange = useCallback(
@@ -77,7 +83,7 @@ export function Virtuals() {
         }
       }
     },
-    [activeEffects, effectSettings, selectedEffects, availableEffects]
+    [activeEffects, effectSettings, selectedEffects, availableEffects, setEffectSettings]
   );
 
   const handleStartEffect = useCallback(
@@ -96,7 +102,7 @@ export function Virtuals() {
         } catch (err) { console.error("Failed to start effect:", err); }
       }
     },
-    [activeEffects, selectedEffects, effectSettings, availableEffects]
+    [activeEffects, selectedEffects, effectSettings, availableEffects, setActiveEffects]
   );
 
   const handleStopEffect = useCallback(async (virtualId: string) => {
@@ -104,24 +110,71 @@ export function Virtuals() {
       await commands.stopEffect(virtualId);
       setActiveEffects({ ...activeEffects, [virtualId]: false });
     } catch (err) { console.error("Failed to stop effect:", err); }
-  }, [activeEffects]);
+  }, [activeEffects, setActiveEffects]);
+
+  const handlePresetLoad = useCallback((virtualId: string, newSettings: EffectConfig) => {
+    const effectId = selectedEffects[virtualId];
+    if (!effectId) return;
+    
+    // --- START: THE FIX ---
+    // `newSettings` IS the settings object, not an array containing it.
+    const settingsObject = newSettings.config;
+    // --- END: THE FIX ---
+    
+    const newSettingsForEffect = { ...effectSettings[virtualId]?.[effectId], ...settingsObject };
+    setEffectSettings({ ...effectSettings, [virtualId]: { ...effectSettings[virtualId], [effectId]: newSettingsForEffect } });
+    
+    if (activeEffects[virtualId]) {
+      const configPayload = buildConfigPayload(effectId, newSettingsForEffect, availableEffects);
+      if (configPayload) {
+        commands.updateEffectSettings(virtualId, configPayload).catch(console.error);
+      }
+    }
+  }, [selectedEffects, effectSettings, activeEffects, availableEffects, setEffectSettings]);
+
+  const handlePresetSave = useCallback(async (virtualId: string, presetName: string) => {
+    const effectId = selectedEffects[virtualId];
+    const settings = effectSettings[virtualId]?.[effectId];
+    if (!effectId || !settings) return;
+
+    // The backend's newtype expects just the Value, so we pass the object directly.
+    const settingsPayload = settings as EffectConfig;
+    
+    const result = await commands.savePreset(effectId, presetName, settingsPayload);
+    if (result.status === 'ok') {
+        setPresetsForEffect(effectId, null as any); 
+    }
+  }, [selectedEffects, effectSettings, setPresetsForEffect]);
+  
+  const handlePresetDelete = useCallback(async (virtualId: string, presetName: string) => {
+    const effectId = selectedEffects[virtualId];
+    if (!effectId) return;
+    
+    const result = await commands.deletePreset(effectId, presetName);
+    if (result.status === 'ok') {
+        setPresetsForEffect(effectId, null as any);
+    }
+  }, [selectedEffects, setPresetsForEffect]);
 
   return (
     <Grid container spacing={2} sx={{p: 2}}>
-        {virtuals.map((virtual, i) => {
+        {virtuals.map((virtual) => {
             const effectId = selectedEffects[virtual.id];
             return (
-              <Grid key={virtual.id + i}>
+              <Grid key={virtual.id}>
                 <VirtualCard
                   virtual={virtual}
                   isActive={activeEffects[virtual.id] || false}
                   selectedEffect={effectId}
                   schema={effectSchemas[effectId]}
                   settings={effectSettings[virtual.id]?.[effectId]}
-                  onSettingChange={(id: string, value: any) => handleSettingsChange(virtual.id, id, value)}
-                  onEffectSelect={handleEffectSelection}
-                  onStart={handleStartEffect}
-                  onStop={handleStopEffect}
+                  onSettingChange={(id, value) => handleSettingsChange(virtual.id, id, value)}
+                  onEffectSelect={(v, id) => handleEffectSelection(v, id)}
+                  onStart={() => handleStartEffect(virtual)}
+                  onStop={() => handleStopEffect(virtual.id)}
+                  onPresetLoad={(settings) => handlePresetLoad(virtual.id, settings)}
+                  onPresetSave={(name) => handlePresetSave(virtual.id, name)}
+                  onPresetDelete={(name) => handlePresetDelete(virtual.id, name)}
                 />
               </Grid>
             )

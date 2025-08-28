@@ -5,6 +5,7 @@ use serde_json::Value;
 use specta::Type;
 use crate::audio::AudioAnalysisData;
 use rand::Rng;
+use crate::engine::EffectConfig;
 
 pub const NAME: &str = "Fire";
 
@@ -122,4 +123,43 @@ impl Effect for Fire {
     fn get_base_config(&self) -> BaseEffectConfig {
         self.config.base.clone()
     }
+}
+
+use std::collections::HashMap;
+// This function must exist to satisfy the generated code.
+// It can be empty if there are no built-in presets for this effect.
+pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
+    let mut presets = HashMap::new();
+
+    presets.insert(
+        "Classic Campfire".to_string(),
+        EffectConfig::Fire(FireConfig {
+            cooling: 0.45,
+            sparking: 0.6,
+            gradient: "linear-gradient(90deg, #000000 0%, #D43300 30%, #FF8000 70%, #FFFF00 100%)".to_string(),
+            base: BaseEffectConfig { mirror: false, flip: false, blur: 1.5, background_color: "#000000".to_string() },
+        }),
+    );
+
+    presets.insert(
+        "Soul Fire".to_string(),
+        EffectConfig::Fire(FireConfig {
+            cooling: 0.6,
+            sparking: 0.4,
+            gradient: "linear-gradient(90deg, #000000 0%, #00FFFF 50%, #FFFFFF 100%)".to_string(),
+            base: BaseEffectConfig { mirror: false, flip: false, blur: 2.0, background_color: "#000000".to_string() },
+        }),
+    );
+
+    presets.insert(
+        "Nuclear Waste".to_string(),
+        EffectConfig::Fire(FireConfig {
+            cooling: 0.3,
+            sparking: 0.8,
+            gradient: "linear-gradient(90deg, #000000 0%, #00FF00 40%, #ADFF2F 100%)".to_string(),
+            base: BaseEffectConfig { mirror: true, flip: false, blur: 0.5, background_color: "#000000".to_string() },
+        }),
+    );
+    
+    presets
 }

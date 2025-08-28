@@ -1,4 +1,5 @@
 use crate::audio::DspSettings;
+use crate::presets::EffectPresetMap;
 use crate::types::{Device, Virtual};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,6 +16,9 @@ pub struct EngineState {
     pub virtuals: HashMap<String, Virtual>,
     #[serde(default)]
     pub dsp_settings: DspSettings,
+    
+    #[serde(default)]
+    pub effect_presets: EffectPresetMap,
 }
 
 fn get_settings_path(app_handle: &AppHandle) -> PathBuf {
@@ -39,9 +43,7 @@ pub fn save_engine_state(app_handle: &AppHandle, engine_state: &EngineState) {
 
 #[tauri::command]
 #[specta::specta]
-// Change the return type to a Result
 pub fn get_default_engine_state() -> Result<EngineState, String> {
-    // Wrap the return value in Ok()
     Ok(EngineState::default())
 }
 

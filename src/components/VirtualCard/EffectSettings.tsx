@@ -1,98 +1,124 @@
-import type { EffectSetting } from '../../bindings';
-import { Box, Slider, Switch, Typography, FormControlLabel, FormControl, InputLabel, Select, MenuItem, Stack, Button } from '@mui/material';
+import { useEffect } from 'react';
+import type { EffectSetting, PresetCollection } from '../../bindings';
+import { Box, Slider, Typography, FormControl, InputLabel, Select, MenuItem, Stack, Button, Divider } from '@mui/material';
 import GradientPicker from '../GradientPicker/GradientPicker';
+import { commands } from '../../bindings';
+import { useStore } from '../../store/useStore';
+import { PresetManager } from './PresetManager';
 
 interface EffectSettingsProps {
   schema: EffectSetting[];
   settings: Record<string, any>;
   onSettingChange: (id: string, value: any) => void;
+  effectId: string;
+  onPresetLoad: (settings: any) => void;
+  onPresetSave: (presetName: string) => void;
+  onPresetDelete: (presetName: string) => void;
 }
 
 const getSortPriority = (setting: EffectSetting): number => {
   if (setting.id.includes('gradient')) return 1;
   if (setting.id.includes('color')) return 2;
-  
   switch (setting.control.type) {
     case 'slider': return 3;
     case 'checkbox': return 4;
     case 'select': return 5;
-    default: return 10; // Everything else comes last
+    default: return 10;
   }
 };
 
-export function EffectSettings({ schema, settings, onSettingChange }: EffectSettingsProps) {
-   const sortedSchema = [...schema].sort((a, b) => {
+export function EffectSettings({ schema, settings, onSettingChange, effectId, onPresetLoad, onPresetSave, onPresetDelete }: EffectSettingsProps) {
+  const { presetCache, setPresetsForEffect } = useStore();
+  const presets = presetCache[effectId];
+
+useEffect(() => {
+    console.log(`[EffectSettings] Effect hook running for effectId: ${effectId}`);
+    if (effectId && !presets) {
+        console.log(`[EffectSettings] Cache miss. Fetching presets for ${effectId}...`);
+        commands.loadPresets(effectId).then(result => {
+            console.log(`[EffectSettings] Got result for ${effectId}:`, result);
+            if (result.status === 'ok') {
+                setPresetsForEffect(effectId, result.data);
+            }
+        }).catch(console.error);
+    }
+}, [effectId, presets, setPresetsForEffect]);
+
+  const sortedSchema = [...schema].sort((a, b) => {
     const priorityA = getSortPriority(a);
     const priorityB = getSortPriority(b);
-    return priorityA - priorityB; // This performs the comparison
+    return priorityA - priorityB;
   });
 
-  console.log('Sorted Schema:', sortedSchema);
   return (
+    <Box>
+        <PresetManager
+            presets={presets}
+            onLoad={onPresetLoad}
+            onSave={onPresetSave}
+            onDelete={onPresetDelete}
+        />
+        <Divider sx={{ my: 2 }} />
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        {sortedSchema.map((setting, index) => {
+            const value = settings[setting.id] ?? setting.defaultValue;
 
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-      {sortedSchema.map((setting, index) => {
-        const value = settings[setting.id] ?? setting.defaultValue;
-
-        switch (setting.control.type) {
-          case 'slider':
-            const { min, max, step } = setting.control;
-            return (
-              <Stack direction={'row'} key={setting.id} sx={{ mt: 2, flexBasis: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant='caption' gutterBottom sx={{ width: 100 }}>{setting.name}</Typography>
-                <Slider
-                  value={Number(value)}
-                  onChange={(_e, newValue) => onSettingChange(setting.id, newValue)}
-                  min={min}
-                  max={max}
-                  step={step}
-                  valueLabelDisplay="auto"
+            switch (setting.control.type) {
+            case 'slider':
+                const { min, max, step } = setting.control;
+                return (
+                <Stack direction={'row'} key={setting.id} sx={{ mt: 2, flexBasis: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant='caption' gutterBottom sx={{ width: 100 }}>{setting.name}</Typography>
+                    <Slider
+                    value={Number(value)}
+                    onChange={(_e, newValue) => onSettingChange(setting.id, newValue)}
+                    min={min}
+                    max={max}
+                    step={step}
+                    valueLabelDisplay="auto"
+                    />
+                </Stack>
+                );
+            case 'checkbox':
+                return (
+                <Button key={setting.id} sx={{ flexBasis: '48%', mt: 1 }} variant={!!value ? 'contained' : 'outlined'} onClick={() => onSettingChange(setting.id, !value)}>
+                    <Typography variant='caption'>{setting.name}</Typography>
+                </Button>
+                );
+            case 'colorPicker':
+                return (
+                <GradientPicker
+                    pickerBgColor={String(value)}
+                    key={setting.id}
+                    title={setting.name}
+                    index={index}
+                    isGradient={true}
+                    sendColorToVirtuals={(color: any) => {
+                    onSettingChange(setting.id, color);
+                    }}
                 />
-              </Stack>
-            );
-          case 'checkbox':
-            return (
-              <Button key={setting.id} sx={{ flexBasis: '48%', mt: 1 }} variant={!!value ? 'contained' : 'outlined'} onClick={() => onSettingChange(setting.id, !value)}>
-                <Typography variant='caption'>{setting.name}</Typography>
-              </Button>
-            );
-          case 'colorPicker':
-            return (
-              <GradientPicker
-                pickerBgColor={String(value)}
-                key={setting.id}
-                title={setting.name}
-                index={index}
-                isGradient={true}
-                // wrapperStyle={wrapperStyle}
-                // colors={colors}
-                // handleAddGradient={handleAddGradient}
-                sendColorToVirtuals={(color: any) => {
-                  onSettingChange(setting.id, color);
-                }}
-                // showHex={showHex}
-              />
-            );
-          case 'select':
-            const { options } = setting.control;
-            return (
-              <FormControl fullWidth size="small" key={setting.id} sx={{ mt: 2 }}>
-                <InputLabel>{setting.name}</InputLabel>
-                <Select
-                  label={setting.name}
-                  value={String(value)}
-                  onChange={(e) => onSettingChange(setting.id, e.target.value)}
-                >
-                  {options.map(opt => (
-                    <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            );
-          default:
-            return null;
-        }
-      })}
+                );
+            case 'select':
+                const { options } = setting.control;
+                return (
+                <FormControl fullWidth size="small" key={setting.id} sx={{ mt: 2 }}>
+                    <InputLabel>{setting.name}</InputLabel>
+                    <Select
+                    label={setting.name}
+                    value={String(value)}
+                    onChange={(e) => onSettingChange(setting.id, e.target.value)}
+                    >
+                    {options.map(opt => (
+                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                    ))}
+                    </Select>
+                </FormControl>
+                );
+            default:
+                return null;
+            }
+        })}
+        </Box>
     </Box>
   );
 }

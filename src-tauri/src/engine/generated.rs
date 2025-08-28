@@ -53,3 +53,24 @@ pub fn config_to_value(config: EffectConfig) -> Value {
         EffectConfig::Scan(c) => serde_json::to_value(c).unwrap(),
     }
 }
+
+use std::collections::HashMap;
+
+pub fn get_built_in_presets_for_effect(effect_id: &str) -> HashMap<String, Value> {
+    match effect_id {
+        "blade_power" => effects::blade_power::get_built_in_presets()
+            .into_iter()
+            .map(|(k, v)| (k, serde_json::to_value(v).unwrap()))
+            .collect(),
+        "fire" => effects::fire::get_built_in_presets()
+            .into_iter()
+            .map(|(k, v)| (k, serde_json::to_value(v).unwrap()))
+            .collect(),
+        "scan" => effects::scan::get_built_in_presets()
+            .into_iter()
+            .map(|(k, v)| (k, serde_json::to_value(v).unwrap()))
+            .collect(),
+        _ => HashMap::new(),
+    }
+}
+

@@ -34,28 +34,37 @@ pub struct PlaybackState {
     pub is_paused: bool,
 }
 
+#[derive(Serialize, Type, Clone)]
+pub struct PresetCollection {
+    pub user: HashMap<String, EffectConfig>,
+    pub built_in: HashMap<String, EffectConfig>,
+}
+
 pub struct EngineStateTx(pub Sender<EngineRequest>);
 pub enum EngineRequest {
     GetVirtuals(Sender<Vec<Virtual>>),
     GetDevices(Sender<Vec<Device>>),
     GetDspSettings(Sender<DspSettings>),
     GetPlaybackState(Sender<PlaybackState>),
+    GetPresets(String, Sender<PresetCollection>),
 }
 
 pub enum EngineCommand {
-    StartEffect { virtual_id: String, config: EffectConfig, },
-    StopEffect { virtual_id: String, },
-    UpdateSettings { virtual_id: String, settings: EffectConfig, },
-    AddVirtual { config: Virtual, },
-    UpdateVirtual { config: Virtual, },
-    RemoveVirtual { virtual_id: String, },
-    AddDevice { config: Device, },
-    RemoveDevice { device_ip: String, },
-    SetTargetFps { fps: u32, },
-    UpdateDspSettings { settings: DspSettings, },
+    StartEffect { virtual_id: String, config: EffectConfig },
+    StopEffect { virtual_id: String },
+    UpdateSettings { virtual_id: String, settings: EffectConfig },
+    AddVirtual { config: Virtual },
+    UpdateVirtual { config: Virtual },
+    RemoveVirtual { virtual_id: String },
+    AddDevice { config: Device },
+    RemoveDevice { device_ip: String },
+    SetTargetFps { fps: u32 },
+    UpdateDspSettings { settings: DspSettings },
     RestartAudioCapture,
     TogglePause,
     ReloadState,
+    SavePreset { effect_id: String, preset_name: String, settings: EffectConfig },
+    DeletePreset { effect_id: String, preset_name: String },
 }
 
 pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);
@@ -82,8 +91,6 @@ pub fn run_effect_engine(
 ) {
     let mut engine_state = store::load_engine_state(&app_handle);
     
-    // --- START: SIMPLIFIED STARTUP LOGIC ---
-    // The logic is now simple: what's in the file is the truth.
     let mut virtuals: HashMap<String, ActiveVirtual> = engine_state
         .virtuals
         .into_iter()
@@ -100,7 +107,6 @@ pub fn run_effect_engine(
         })
         .collect();
     let mut devices = engine_state.devices;
-    // --- END: SIMPLIFIED STARTUP LOGIC ---
 
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     socket.set_nonblocking(true).expect("Failed to set non-blocking socket");
@@ -126,6 +132,24 @@ pub fn run_effect_engine(
                 EngineRequest::GetDspSettings(responder) => {
                     responder.send(engine_state.dsp_settings.clone()).unwrap();
                 }
+                EngineRequest::GetPresets(effect_id, responder) => {
+                    let user_presets = engine_state.effect_presets.get(&effect_id).cloned().unwrap_or_default();
+                    
+                    let built_in_presets_value = get_built_in_presets_for_effect(&effect_id);
+                    
+                    let built_in_presets: HashMap<String, EffectConfig> = built_in_presets_value
+                        .into_iter()
+                        .filter_map(|(k, v)| {
+                            // This will now SUCCEED because the `Value` contains the `type` field
+                            serde_json::from_value::<EffectConfig>(v).ok().map(|config| (k, config))
+                        })
+                        .collect();
+
+                    responder.send(PresetCollection {
+                        user: user_presets,
+                        built_in: built_in_presets,
+                    }).unwrap();
+                }
             }
         }
 
@@ -143,11 +167,9 @@ pub fn run_effect_engine(
                     app_handle.emit("dsp-settings-changed", &settings).unwrap();
                     should_save_state = true;
                 }
-                // --- START: SIMPLIFIED RELOADSTATE ---
                 EngineCommand::ReloadState => {
                     println!("[ENGINE] Reloading state from disk.");
                     engine_state = store::load_engine_state(&app_handle);
-                    // The logic is now the same simple logic as startup.
                     virtuals = engine_state.virtuals.into_iter().map(|(id, config)| {
                             let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
                             (id, ActiveVirtual {
@@ -163,7 +185,6 @@ pub fn run_effect_engine(
                     emit_virtuals_update(&virtuals, &app_handle);
                     app_handle.emit("dsp-settings-changed", &engine_state.dsp_settings).unwrap();
                 }
-                // --- END: MODIFIED RELOADSTATE ---
                 EngineCommand::TogglePause => {
                     is_paused = !is_paused;
                     println!("[ENGINE] Playback state toggled. Paused: {}", is_paused);
@@ -172,7 +193,6 @@ pub fn run_effect_engine(
                 EngineCommand::AddDevice { config } => {
                     let device_ip = config.ip_address.clone();
                     devices.insert(device_ip.clone(), config.clone());
-                    // This is the ONLY place a device-virtual is "auto-created".
                     let virtual_id = format!("device_{}", device_ip);
                     let matrix_data = vec![(0..config.led_count)
                         .map(|i| { Some(MatrixCell { device_id: device_ip.clone(), pixel: i }) })
@@ -198,7 +218,7 @@ pub fn run_effect_engine(
                 EngineCommand::RemoveDevice { device_ip } => {
                     devices.remove(&device_ip);
                     let virtual_id = format!("device_{}", device_ip);
-                    virtuals.remove(&virtual_id); // Also remove its virtual representation
+                    virtuals.remove(&virtual_id);
                     should_save_state = true;
                     emit_devices_update(&devices, &app_handle);
                     emit_virtuals_update(&virtuals, &app_handle);
@@ -271,17 +291,27 @@ pub fn run_effect_engine(
                         target_frame_duration = Duration::from_millis(1000 / fps as u64);
                     }
                 }
+                 EngineCommand::SavePreset { effect_id, preset_name, settings } => {
+                    engine_state
+                        .effect_presets
+                        .entry(effect_id)
+                        .or_default()
+                        // --- FIX: Insert the correct type ---
+                        .insert(preset_name, settings);
+                    should_save_state = true;
+                }
+                EngineCommand::DeletePreset { effect_id, preset_name } => {
+                    if let Some(effect_map) = engine_state.effect_presets.get_mut(&effect_id) {
+                        if effect_map.remove(&preset_name).is_some() {
+                            should_save_state = true;
+                        }
+                    }
+                }
             }
         }
         if should_save_state {
             engine_state.devices = devices.clone();
-            // --- START: THE CORE FIX - REMOVE THE FILTER ---
-            // Now we save ALL virtuals, including device-virtuals.
-            engine_state.virtuals = virtuals
-                .iter()
-                .map(|(id, v)| (id.clone(), v.config.clone()))
-                .collect();
-            // --- END: THE CORE FIX ---
+            engine_state.virtuals = virtuals.iter().map(|(id, v)| (id.clone(), v.config.clone())).collect();
             store::save_engine_state(&app_handle, &engine_state);
         }
         
@@ -322,22 +352,13 @@ pub fn run_effect_engine(
                             let first_half_g = &g_clone[0..half_len];
                             let first_half_b = &b_clone[0..half_len];
 
-                            active_virtual.r_channel[0..half_len].copy_from_slice(
-                                &first_half_r.iter().rev().cloned().collect::<Vec<f32>>(),
-                            );
-                            active_virtual.g_channel[0..half_len].copy_from_slice(
-                                &first_half_g.iter().rev().cloned().collect::<Vec<f32>>(),
-                            );
-                            active_virtual.b_channel[0..half_len].copy_from_slice(
-                                &first_half_b.iter().rev().cloned().collect::<Vec<f32>>(),
-                            );
+                            active_virtual.r_channel[0..half_len].copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
+                            active_virtual.g_channel[0..half_len].copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
+                            active_virtual.b_channel[0..half_len].copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
 
-                            active_virtual.r_channel[pixel_count - half_len..]
-                                .copy_from_slice(first_half_r);
-                            active_virtual.g_channel[pixel_count - half_len..]
-                                .copy_from_slice(first_half_g);
-                            active_virtual.b_channel[pixel_count - half_len..]
-                                .copy_from_slice(first_half_b);
+                            active_virtual.r_channel[pixel_count - half_len..].copy_from_slice(first_half_r);
+                            active_virtual.g_channel[pixel_count - half_len..].copy_from_slice(first_half_g);
+                            active_virtual.b_channel[pixel_count - half_len..].copy_from_slice(first_half_b);
                         } else {
                             for i in 0..half_len {
                                 let mirror_i = pixel_count - 1 - i;
@@ -352,8 +373,7 @@ pub fn run_effect_engine(
                         active_virtual.b_channel.reverse();
                     }
 
-                    let bg_color = colors::parse_single_color(&base_config.background_color)
-                        .unwrap_or([0, 0, 0]);
+                    let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0, 0, 0]);
                     for i in 0..pixel_count {
                         virtual_frame[i * 3] = (active_virtual.r_channel[i] as u8).saturating_add(bg_color[0]);
                         virtual_frame[i * 3 + 1] = (active_virtual.g_channel[i] as u8).saturating_add(bg_color[1]);
@@ -398,13 +418,11 @@ pub fn run_effect_engine(
     }
 }
 
-// --- START: NEW TAURI COMMAND (Master Plan v2.2) ---
 #[tauri::command]
 #[specta::specta]
 pub fn restart_audio_capture(command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::RestartAudioCapture).map_err(|e| e.to_string())
 }
-// --- END: NEW TAURI COMMAND ---
 
 #[tauri::command]
 #[specta::specta]
@@ -514,4 +532,36 @@ pub fn update_dsp_settings(
     command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx.0.send(EngineCommand::UpdateDspSettings { settings }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_preset(
+    effect_id: String,
+    preset_name: String,
+    settings:EffectConfig,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx.0.send(EngineCommand::SavePreset { effect_id, preset_name, settings }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_preset(
+    effect_id: String,
+    preset_name: String,
+    command_tx: State<EngineCommandTx>,
+) -> Result<(), String> {
+    command_tx.0.send(EngineCommand::DeletePreset { effect_id, preset_name }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn load_presets(
+    effect_id: String,
+    engine_state_tx: State<EngineStateTx>,
+) -> Result<PresetCollection, String> {
+    let (responder_tx, responder_rx) = mpsc::channel();
+    engine_state_tx.0.send(EngineRequest::GetPresets(effect_id, responder_tx)).map_err(|e| e.to_string())?;
+    responder_rx.recv().map_err(|e| e.to_string())
 }
