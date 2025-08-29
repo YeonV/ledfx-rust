@@ -161,7 +161,7 @@ pub fn set_audio_device(
     #[cfg(not(target_os = "android"))]
     return crate::audio::desktop::set_desktop_device_impl(device_name, command_tx);
     #[cfg(target_os = "android")]
-    return Ok(());
+    return crate::audio::android::set_android_device_impl(device_name, command_tx);
 }
 
 #[tauri::command]

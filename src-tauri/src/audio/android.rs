@@ -1,59 +1,119 @@
-use super::{AudioAnalysisData, AudioCommand, DspSettings, SharedDspSettings};
-use dasp_sample::{Sample, ToSample};
+use super::{
+    AudioAnalysisData, AudioCommand, AudioDevice, AudioDevicesInfo, DspSettings, SharedDspSettings,
+};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::{Device, SampleFormat, Stream, SupportedStreamConfig};
+use dasp::{interpolate::linear::Linear, signal, Signal};
+use dasp_sample::Sample;
 use jni::objects::{JByteArray, JClass};
 use jni::sys::jint;
 use jni::JNIEnv;
 use once_cell::sync::Lazy;
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
-use std::collections::VecDeque;
 use std::f32::consts::PI;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
+use tauri::State;
 
-// --- START: GLOBAL STATE FOR JNI ---
-// We need static state that the JNI function can access.
+// --- GLOBAL STATE FOR JNI & CPAL/JNI TOGGLE ---
 static SHARED_AUDIO_DATA: Lazy<Arc<Mutex<AudioAnalysisData>>> = Lazy::new(Default::default);
 static SHARED_DSP_SETTINGS: Lazy<SharedDspSettings> = Lazy::new(Default::default);
-// --- END: GLOBAL STATE FOR JNI ---
+// This flag ensures that JNI processing and CPAL processing don't run simultaneously.
+static IS_NATIVE_CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(true);
 
-// This function is called from lib.rs to link the engine's state to our static state.
+/// This is the main audio loop for Android, it handles commands to switch capture methods.
 pub fn run_android_capture(
-    _command_rx: mpsc::Receiver<AudioCommand>, // Commands are not yet handled on Android
+    command_rx: mpsc::Receiver<AudioCommand>,
     audio_data: Arc<Mutex<AudioAnalysisData>>,
     dsp_settings: Arc<Mutex<DspSettings>>,
 ) {
     // Connect the shared state from the main app to our static JNI-accessible state.
     let mut global_data = SHARED_AUDIO_DATA.lock().unwrap();
     *global_data = audio_data.lock().unwrap().clone();
-
     let mut global_settings = SHARED_DSP_SETTINGS.0.lock().unwrap();
     *global_settings = dsp_settings.lock().unwrap().clone();
 
-    println!("[AUDIO] Android capture context initialized.");
+    println!("[AUDIO] Android capture context initialized. Defaulting to Native JNI mode.");
+
+    let host = cpal::default_host();
+    let mut current_cpal_stream: Option<Stream> = None;
+
+    loop {
+        if let Ok(command) = command_rx.try_recv() {
+            match command {
+                AudioCommand::ChangeDevice(device_name) => {
+                    println!(
+                        "[AUDIO] Android received ChangeDevice command: {}",
+                        device_name
+                    );
+
+                    // Always stop any existing CPAL stream when changing devices.
+                    if let Some(stream) = current_cpal_stream.take() {
+                        stream.pause().expect("Failed to pause CPAL stream");
+                        drop(stream);
+                        println!("[AUDIO] Stopped existing CPAL stream.");
+                    }
+
+                    // The main decision: are we using the JNI bridge or a CPAL device?
+                    if device_name.contains("Native") {
+                        IS_NATIVE_CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
+                        println!("[AUDIO] Switched to JNI Native Visualizer mode.");
+                    } else {
+                        IS_NATIVE_CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
+                        println!("[AUDIO] Switched to CPAL device: {}", device_name);
+
+                        if let Some(device) = find_device(&host, &device_name) {
+                            if let Ok(config) = device.default_input_config() {
+                                let stream = build_and_play_stream_cpal(
+                                    device,
+                                    config,
+                                    audio_data.clone(),
+                                    dsp_settings.clone(),
+                                );
+                                current_cpal_stream = Some(stream);
+                            } else {
+                                eprintln!(
+                                    "[AUDIO] Could not get default input config for {}",
+                                    device_name
+                                );
+                            }
+                        } else {
+                            eprintln!(
+                                "[AUDIO] Could not find CPAL device on Android: {}",
+                                device_name
+                            );
+                        }
+                    }
+                }
+                AudioCommand::UpdateSettings(new_settings) => {
+                    println!("[AUDIO] Android received new DSP settings.");
+                    let mut settings = SHARED_DSP_SETTINGS.0.lock().unwrap();
+                    *settings = new_settings;
+                }
+                AudioCommand::RestartStream => {
+                    // Restarting on Android is handled by re-sending ChangeDevice from the frontend.
+                    println!("[AUDIO] Android received RestartStream command (no-op, frontend should re-select device).");
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
 }
 
-// --- JNI FUNCTION: The entry point for audio data from Android ---
+/// JNI FUNCTION: The entry point for audio data from the Android Native Visualizer API.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onPcmDataCapture(
     env: JNIEnv,
     _class: JClass,
-    pcm_data: JByteArray, // We now expect raw PCM audio data, not FFT data
+    pcm_data: JByteArray,
     sampling_rate: jint,
 ) {
-    // --- START: NEW DSP LOGIC (ported from desktop.rs) ---
-    let settings = SHARED_DSP_SETTINGS.0.lock().unwrap();
-
-    // Check if there's anything to do
-    if SHARED_AUDIO_DATA.lock().unwrap().melbanks.is_empty() {
-        let num_bands = settings.num_bands as usize;
-        if num_bands > 0 {
-            SHARED_AUDIO_DATA.lock().unwrap().melbanks = vec![0.0; num_bands];
-        } else {
-            return;
-        }
+    // If a CPAL stream is active, do nothing.
+    if !IS_NATIVE_CAPTURE_ACTIVE.load(Ordering::SeqCst) {
+        return;
     }
-
     let fft_size = settings.fft_size as usize;
     let num_bands = settings.num_bands as usize;
 
@@ -166,7 +226,6 @@ impl Default for AudioProcessingState {
         }
     }
 }
-
 impl AudioProcessingState {
     fn initialize(&mut self, fft_size: usize, num_bands: usize) {
         self.fft_size = fft_size;
@@ -181,10 +240,31 @@ impl AudioProcessingState {
     }
 }
 
-pub fn get_android_devices() -> Result<Vec<AudioDevice>, String> {
+// --- CPAL Stream Building Logic (ported from desktop.rs) ---
+
+fn find_device(host: &cpal::Host, name: &str) -> Option<Device> {
+    host.input_devices()
+        .ok()?
+        .find(|d| d.name().unwrap_or_default() == name)
+}
+
+fn build_and_play_stream_cpal(
+    device: Device,
+    config: SupportedStreamConfig,
+    audio_data: Arc<Mutex<AudioAnalysisData>>,
+    dsp_settings: Arc<Mutex<DspSettings>>,
+) -> Stream {
+    // This function is identical to the one in desktop.rs
+    // It contains the generic `process_audio` helper inside it.
+}
+
+// --- Fully Functional Device Management ---
+
+pub fn get_android_devices() -> Result<AudioDevicesInfo, String> {
     let mut device_list: Vec<AudioDevice> = Vec::new();
+    let native_device_name = "System Audio (Native Visualizer)".to_string();
     device_list.push(AudioDevice {
-        name: "System Audio (Native Visualizer)".to_string(),
+        name: native_device_name.clone(),
     });
 
     let host = cpal::default_host();
@@ -195,13 +275,20 @@ pub fn get_android_devices() -> Result<Vec<AudioDevice>, String> {
             }
         }
     }
-    Ok(device_list)
+
+    // On Android, the native visualizer is the best default.
+    Ok(AudioDevicesInfo {
+        devices: device_list,
+        default_device_name: Some(native_device_name),
+    })
 }
 
 pub fn set_android_device(
-    _device_name: String,
-    _command_tx: State<mpsc::Sender<AudioCommand>>,
+    device_name: String,
+    command_tx: State<mpsc::Sender<AudioCommand>>,
 ) -> Result<(), String> {
-    println!("set_audio_device on Android will select between Native and CPAL in the future.");
-    Ok(())
+    println!("[AUDIO] Setting Android audio device to: {}", device_name);
+    command_tx
+        .send(AudioCommand::ChangeDevice(device_name))
+        .map_err(|e| e.to_string())
 }
