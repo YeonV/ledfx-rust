@@ -4,6 +4,7 @@ use super::{
 use crate::audio::shared_processing::build_and_play_stream_shared;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream};
+use dasp::{interpolate::linear::Linear, signal, Signal};
 use dasp_sample::{Sample, ToSample};
 use jni::objects::{JByteArray, JClass};
 use jni::sys::jint;
@@ -11,7 +12,6 @@ use jni::JNIEnv;
 use once_cell::sync::Lazy;
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
-use std::collections::VecDeque;
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -189,7 +189,6 @@ pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onPcmDataCapture
         .map(|a| i16::from_le_bytes([a[0], a[1]]))
         .collect();
 
-    // --- START: THE FIX ---
     let source_sample_rate = sampling_rate as u32;
     let target_sample_rate = settings.sample_rate;
 
