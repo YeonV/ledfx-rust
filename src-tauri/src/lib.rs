@@ -1,3 +1,4 @@
+pub mod api;
 pub mod audio;
 pub mod effects;
 pub mod engine;
@@ -55,11 +56,11 @@ fn configure_builder() -> Builder<tauri::Wry> {
             engine::save_preset,
             engine::delete_preset,
             engine::load_presets,
-            // --- START: NEW SCENE COMMANDS ---
             engine::save_scene,
             engine::delete_scene,
             engine::activate_scene,
-            engine::get_scenes // --- END: NEW SCENE COMMANDS ---
+            engine::get_scenes,
+            store::set_api_port
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()
@@ -92,12 +93,25 @@ pub fn run() {
     let (engine_command_tx, engine_command_rx) = mpsc::channel::<engine::EngineCommand>();
     let (engine_state_tx, engine_state_rx) = mpsc::channel::<engine::EngineRequest>();
     let (audio_command_tx, audio_command_rx) = mpsc::channel::<audio::AudioCommand>();
+    let (api_command_tx, api_command_rx) = mpsc::channel::<api::ApiCommand>();
     let audio_data = audio::SharedAudioData::default();
     let dsp_settings = audio::SharedDspSettings::default();
 
     let audio_data_clone_for_thread = audio_data.0.clone();
     let dsp_settings_clone_for_thread = dsp_settings.0.clone();
-    let audio_command_tx_for_engine = audio_command_tx.clone();
+    // let audio_command_tx_for_engine = audio_command_tx.clone();
+
+    let initial_port = 3030; // Start with default, engine will update it
+    let api_manager_engine_command_tx = engine_command_tx.clone();
+    let api_manager_engine_state_tx = engine_state_tx.clone();
+    thread::spawn(move || {
+        api::api_server_manager(
+            api_command_rx,
+            api_manager_engine_command_tx, // Correct arg 2
+            api_manager_engine_state_tx,   // Correct arg 3
+            initial_port,
+        );
+    });
 
     #[cfg(debug_assertions)]
     {
@@ -114,9 +128,10 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(engine::EngineCommandTx(engine_command_tx))
+        .manage(engine::EngineCommandTx(engine_command_tx.clone()))
         .manage(engine::EngineStateTx(engine_state_tx))
-        .manage(audio_command_tx)
+        .manage(audio_command_tx.clone())
+        .manage(api_command_tx.clone())
         .manage(audio_data)
         .manage(dsp_settings)
         .invoke_handler(builder.invoke_handler());
@@ -125,6 +140,7 @@ pub fn run() {
         builder.mount_events(app);
         let state_handle = app.handle().clone();
         let engine_handle = app.handle().clone();
+        let engine_api_command_tx = api_command_tx;
 
         thread::spawn(move || {
             let audio_data_state = state_handle.state::<audio::SharedAudioData>();
@@ -132,7 +148,8 @@ pub fn run() {
                 engine_command_rx,
                 engine_state_rx,
                 audio_data_state,
-                audio_command_tx_for_engine,
+                audio_command_tx,
+                engine_api_command_tx,
                 engine_handle,
             );
         });

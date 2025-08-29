@@ -8,6 +8,7 @@ pub use commands::*;
 pub use generated::*;
 pub use state::*;
 
+use crate::api::ApiCommand;
 use crate::audio::SharedAudioData;
 use crate::store;
 use std::collections::HashMap;
@@ -22,9 +23,16 @@ pub fn run_effect_engine(
     request_rx: Receiver<EngineRequest>,
     audio_data: State<SharedAudioData>,
     audio_command_tx: mpsc::Sender<crate::audio::AudioCommand>,
+    api_command_tx: mpsc::Sender<ApiCommand>,
     app_handle: AppHandle,
 ) {
     let mut engine_state = store::load_engine_state(&app_handle);
+    let correct_api_port = engine_state.api_port;
+    api_command_tx
+        .send(ApiCommand::Restart {
+            port: correct_api_port,
+        })
+        .unwrap();
 
     let mut virtuals: HashMap<String, ActiveVirtual> = engine_state
         .virtuals
@@ -151,6 +159,7 @@ pub fn run_effect_engine(
                     &mut devices,
                     &mut is_paused,
                     &audio_command_tx,
+                    &api_command_tx,
                     &app_handle,
                 );
             }

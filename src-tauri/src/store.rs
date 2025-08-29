@@ -11,7 +11,6 @@ use tauri::{AppHandle, Manager};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
 pub struct ScenePreset {
-    // <-- Create a simple struct for the preset data
     pub effect_id: String,
     pub preset_name: String,
 }
@@ -19,7 +18,6 @@ pub struct ScenePreset {
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
 #[serde(tag = "type", content = "data", rename_all = "camelCase")]
 pub enum SceneEffect {
-    // Both variants are now tuple-like, containing a struct
     Preset(ScenePreset),
     Custom(EffectConfig),
 }
@@ -28,10 +26,8 @@ pub enum SceneEffect {
 pub struct Scene {
     pub id: String,
     pub name: String,
-    // A map of Virtual ID to the effect that should be active on it
     pub virtual_effects: HashMap<String, SceneEffect>,
 }
-// --- END: NEW SCENE STRUCTS ---
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Type)]
 pub struct EngineState {
@@ -41,14 +37,16 @@ pub struct EngineState {
     pub virtuals: HashMap<String, Virtual>,
     #[serde(default)]
     pub dsp_settings: DspSettings,
-
     #[serde(default)]
     pub effect_presets: EffectPresetMap,
-
-    // --- START: NEW SCENES FIELD ---
     #[serde(default)]
-    pub scenes: HashMap<String, Scene>, // A map of Scene ID to Scene
-                                        // --- END: NEW SCENES FIELD ---
+    pub scenes: HashMap<String, Scene>,
+    #[serde(default = "default_api_port")]
+    pub api_port: u16,
+}
+
+fn default_api_port() -> u16 {
+    3030
 }
 
 fn get_settings_path(app_handle: &AppHandle) -> PathBuf {
@@ -69,6 +67,15 @@ pub fn save_engine_state(app_handle: &AppHandle, engine_state: &EngineState) {
     let path = get_settings_path(app_handle);
     let json_string = serde_json::to_string_pretty(engine_state).unwrap();
     fs::write(path, json_string).expect("Failed to write to settings file");
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_api_port(app_handle: AppHandle, port: u16) -> Result<(), String> {
+    let mut state = load_engine_state(&app_handle);
+    state.api_port = port;
+    save_engine_state(&app_handle, &state);
+    Ok(())
 }
 
 #[tauri::command]

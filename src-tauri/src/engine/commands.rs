@@ -57,6 +57,7 @@ pub enum EngineCommand {
     SaveScene(Scene),
     DeleteScene(String),
     ActivateScene(String),
+    SetApiPort(u16),
 }
 
 pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);

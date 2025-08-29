@@ -59,6 +59,8 @@ type IStore = {
 	setScenes: (scenes: Scene[]) => void
 	activeSceneId: string | null
 	setActiveSceneId: (id: string | null) => void
+	apiPort: number
+	setApiPort: (port: number) => void
 }
 
 export const useStore = create<IStore>()(
@@ -108,7 +110,9 @@ export const useStore = create<IStore>()(
 			scenes: [],
 			setScenes: (scenes) => set({ scenes }),
 			activeSceneId: null,
-			setActiveSceneId: (id) => set({ activeSceneId: id })
+			setActiveSceneId: (id) => set({ activeSceneId: id }),
+			apiPort: 3030, // Default value
+			setApiPort: (port) => set({ apiPort: port })
 		}),
 		{
 			name: 'ledfx-store',
@@ -117,7 +121,8 @@ export const useStore = create<IStore>()(
 					Object.entries(state).filter(([key]) =>
 						[
 							'selectedAudioDevice',
-							'dirtyDspSettings'
+							'dirtyDspSettings',
+							'apiPort'
 							// Scenes are not persisted in the frontend store; they are fetched from the backend.
 						].includes(key)
 					)

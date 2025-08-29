@@ -1,6 +1,7 @@
 use super::commands::EngineCommand;
 use super::generated::{config_to_value, create_effect, get_built_in_presets_for_effect};
 use super::state::{ActiveEffectsState, ActiveVirtual, PlaybackState};
+use crate::api::ApiCommand;
 use crate::audio::AudioCommand;
 use crate::engine::EffectConfig;
 use crate::store::{self, EngineState, Scene, SceneEffect};
@@ -41,11 +42,18 @@ pub fn handle_command(
     devices: &mut HashMap<String, Device>,
     is_paused: &mut bool,
     audio_command_tx: &Sender<AudioCommand>,
+    api_command_tx: &Sender<ApiCommand>,
     app_handle: &AppHandle,
 ) -> bool {
     let mut should_save_state = false;
 
     match command {
+        EngineCommand::SetApiPort(port) => {
+            println!("[ENGINE] Setting API port to {}", port);
+            engine_state.api_port = port;
+            api_command_tx.send(ApiCommand::Restart { port }).unwrap();
+            should_save_state = true;
+        }
         EngineCommand::RestartAudioCapture => {
             println!("[ENGINE] Forwarding RestartStream command to audio thread.");
             audio_command_tx.send(AudioCommand::RestartStream).unwrap();

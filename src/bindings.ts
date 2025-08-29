@@ -279,6 +279,14 @@ async getScenes() : Promise<Result<Scene[], string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async setApiPort(port: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_api_port", { port }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -306,7 +314,7 @@ export type DspSettings = { fft_size: number; num_bands: number; min_freq: numbe
 export type EffectConfig = { type: "blade_power"; config: BladePowerConfig } | { type: "fire"; config: FireConfig } | { type: "scan"; config: ScanConfig }
 export type EffectInfo = { id: string; name: string }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
-export type EngineState = { devices?: Partial<{ [key in string]: Device }>; virtuals?: Partial<{ [key in string]: Virtual }>; dsp_settings?: DspSettings; effect_presets?: Partial<{ [key in string]: Partial<{ [key in string]: EffectConfig }> }>; scenes?: Partial<{ [key in string]: Scene }> }
+export type EngineState = { devices?: Partial<{ [key in string]: Device }>; virtuals?: Partial<{ [key in string]: Virtual }>; dsp_settings?: DspSettings; effect_presets?: Partial<{ [key in string]: Partial<{ [key in string]: EffectConfig }> }>; scenes?: Partial<{ [key in string]: Scene }>; api_port?: number }
 export type FilterbankType = "Balanced" | "Precision" | "Vocal" | "Blade" | { BladePlus: BladePlusParams }
 export type FireConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { cooling: number; sparking: number; gradient: string }
 export type LedsInfo = { count: number }
