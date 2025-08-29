@@ -1,51 +1,51 @@
 {
-  "name": "ledfx-rust",
-  "private": true,
-  "version": "0.1.4",
-  "type": "module",
-  "description": "LedFx on Rust",
-  "keywords": [
-    "ledfx",
-    "rust",
-    "tauri"
-  ],
-  "author": "YeonV (aka Blade)",
-  "license": "MIT",
-  "scripts": {
-    "dev:web": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "dev": "npm-run-all --parallel dev:generate dev:web dev:rust",
-    "dev:generate": "node --watch scripts/generate-effects.js",
-    "dev:rust": "tauri dev"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^7.3.1",
-    "@mui/lab": "^7.0.0-beta.16",
-    "@mui/material": "^7.3.1",
-    "@tauri-apps/api": "^2.8.0",
-    "@tauri-apps/plugin-dialog": "~2",
-    "@tauri-apps/plugin-fs": "~2",
-    "@tauri-apps/plugin-opener": "2.4.0",
-    "@tauri-apps/plugin-os": "~2",
-    "@tauri-apps/plugin-store": "~2",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-gcolor-picker": "^1.3.3",
-    "zustand": "^5.0.8"
-  },
-  "devDependencies": {
-    "@tauri-apps/cli": "^2.8.1",
-    "@types/node": "^24.3.0",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^5.0.1",
-    "npm-run-all": "^4.1.5",
-    "prettier": "^3.6.2",
-    "typescript": "~5.9.2",
-    "vite": "^7.1.3"
-  }
+	"name": "ledfx-rust",
+	"private": true,
+	"version": "0.1.5",
+	"type": "module",
+	"description": "LedFx on Rust",
+	"keywords": [
+		"ledfx",
+		"rust",
+		"tauri"
+	],
+	"author": "YeonV (aka Blade)",
+	"license": "MIT",
+	"scripts": {
+		"dev:web": "vite",
+		"build": "tsc && vite build",
+		"preview": "vite preview",
+		"tauri": "tauri",
+		"dev": "npm-run-all --parallel dev:generate dev:web dev:rust",
+		"dev:generate": "node --watch scripts/generate-effects.js",
+		"dev:rust": "tauri dev"
+	},
+	"dependencies": {
+		"@emotion/react": "^11.14.0",
+		"@emotion/styled": "^11.14.1",
+		"@mui/icons-material": "^7.3.1",
+		"@mui/lab": "^7.0.0-beta.16",
+		"@mui/material": "^7.3.1",
+		"@tauri-apps/api": "^2.8.0",
+		"@tauri-apps/plugin-dialog": "~2",
+		"@tauri-apps/plugin-fs": "~2",
+		"@tauri-apps/plugin-opener": "2.4.0",
+		"@tauri-apps/plugin-os": "~2",
+		"@tauri-apps/plugin-store": "~2",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"react-gcolor-picker": "^1.3.3",
+		"zustand": "^5.0.8"
+	},
+	"devDependencies": {
+		"@tauri-apps/cli": "^2.8.1",
+		"@types/node": "^24.3.0",
+		"@types/react": "^19.1.8",
+		"@types/react-dom": "^19.1.6",
+		"@vitejs/plugin-react": "^5.0.1",
+		"npm-run-all": "^4.1.5",
+		"prettier": "^3.6.2",
+		"typescript": "~5.9.2",
+		"vite": "^7.1.3"
+	}
 }
