@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { useStore } from '../store/useStore';
-import { commands } from '../lib/rust';
+import { useStore } from '@/store/useStore';
+import { commands } from '@/lib/rust';
 
 export const useInit = () => {
     const { 

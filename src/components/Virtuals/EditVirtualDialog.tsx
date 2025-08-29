@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Select, MenuItem, FormControl, InputLabel, IconButton, Box, Typography, Paper, List, ListItem, ListItemText, ListItemSecondaryAction, FormHelperText } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, DragHandle as DragHandleIcon } from '@mui/icons-material';
-import { useStore } from '../../store/useStore';
-import type { Virtual, MatrixCell } from '../../lib/rust';
-import { commands } from '../../lib/rust';
+import { useStore } from '@/store/useStore';
+import type { Virtual, MatrixCell } from '@/lib/rust';
+import { commands } from '@/lib/rust';
 
 interface Segment {
   id: string;

@@ -1,6 +1,6 @@
-import { useStore } from "../../store/useStore";
-import { IconBtn } from "../base/IconBtn";
-import { Settings } from "../Settings/Settings";
+import { useStore } from "@/store/useStore";
+import { IconBtn } from "@/components/base/IconBtn";
+import { Settings } from "./Settings";
 import { Settings as SettingsIcon } from "@mui/icons-material";
 import { Drawer } from "@mui/material";
 

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { useStore } from '../store/useStore';
-import { useFrameStore } from '../store/frameStore';
-import type { Device, Virtual, PlaybackState, DspSettings, Scene, ActiveEffectsState } from '../lib/rust';
+import { useStore } from '@/store/useStore';
+import { useFrameStore } from '@/store/frameStore';
+import type { Device, Virtual, PlaybackState, DspSettings, Scene, ActiveEffectsState } from '@/lib/rust';
 
 export const useEvents = () => {
     const { 

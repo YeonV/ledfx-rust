@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { commands } from '../../lib/rust';
+import { commands } from '@/lib/rust';
 const MelbankVisualizer = () => {
     const [melbanks, setMelbanks] = useState<number[]>([]);
     const canvasRef = useRef<HTMLCanvasElement>(null);

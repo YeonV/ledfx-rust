@@ -1,8 +1,8 @@
-import type { Virtual, EffectConfig, EffectSetting, EffectInfo } from "../../lib/rust";
-import { commands } from "../../lib/rust";
+import type { Virtual, EffectConfig, EffectSetting, EffectInfo } from "@/lib/rust";
+import { commands } from "@/lib/rust";
 import { useCallback } from "react";
 import { VirtualCard } from "./VirtualCard/VirtualCard";
-import { useStore } from "../../store/useStore";
+import { useStore } from "@/store/useStore";
 import { Grid } from "@mui/material";
 
 const buildConfigPayload = (effectId: string, settings: Record<string, any>, availableEffects: EffectInfo[]): EffectConfig | null => {

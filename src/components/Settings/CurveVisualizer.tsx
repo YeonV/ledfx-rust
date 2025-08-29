@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import { commands, DspSettings } from '../../lib/rust';
+import { commands, DspSettings } from '@/lib/rust';
 
 interface CurveVisualizerProps {
   settings: DspSettings;

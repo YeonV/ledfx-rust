@@ -1,63 +1,59 @@
-import { useEffect, useRef } from 'react';
-import { Box } from '@mui/material';
-import { useFrameStore } from '../../../store/frameStore';
+import { useEffect, useRef } from 'react'
+import { Box } from '@mui/material'
+import { useFrameStore } from '@/store/frameStore'
 
 interface EffectPreviewProps {
-  virtualId: string; // Changed from ipAddress
-  active: boolean;
+	virtualId: string // Changed from ipAddress
+	active: boolean
 }
 
 export function EffectPreview({ virtualId, active }: EffectPreviewProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frame = useFrameStore((state) => state.frames[virtualId]);
+	const canvasRef = useRef<HTMLCanvasElement>(null)
+	const frame = useFrameStore((state) => state.frames[virtualId])
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+	useEffect(() => {
+		const canvas = canvasRef.current
+		if (!canvas) return
+		const ctx = canvas.getContext('2d')
+		if (!ctx) return
 
-    const drawFrame = (pixelData: number[] | undefined) => {
-      if (!ctx || !canvas) return;
-      const p = pixelData || [];
-      const numLeds = p.length / 3;
+		const drawFrame = (pixelData: number[] | undefined) => {
+			if (!ctx || !canvas) return
+			const p = pixelData || []
+			const numLeds = p.length / 3
 
-      const { width, height } = canvas.getBoundingClientRect();
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-      }
+			const { width, height } = canvas.getBoundingClientRect()
+			if (canvas.width !== width || canvas.height !== height) {
+				canvas.width = width
+				canvas.height = height
+			}
 
-      if (numLeds === 0) {
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        return;
-      }
-      
-      const ledWidth = canvas.width / numLeds;
-      for (let i = 0; i < numLeds; i++) {
-        const r = p[i * 3];
-        const g = p[i * 3 + 1];
-        const b = p[i * 3 + 2];
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.fillRect(i * ledWidth, 0, Math.ceil(ledWidth), canvas.height);
-      }
-    };
+			if (numLeds === 0) {
+				ctx.fillStyle = 'black'
+				ctx.fillRect(0, 0, canvas.width, canvas.height)
+				return
+			}
 
-    if (active) {
-      drawFrame(frame);
-    } else {
-      drawFrame([]); // Clear canvas if not active
-    }
+			const ledWidth = canvas.width / numLeds
+			for (let i = 0; i < numLeds; i++) {
+				const r = p[i * 3]
+				const g = p[i * 3 + 1]
+				const b = p[i * 3 + 2]
+				ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+				ctx.fillRect(i * ledWidth, 0, Math.ceil(ledWidth), canvas.height)
+			}
+		}
 
-  }, [active, frame]);
+		if (active) {
+			drawFrame(frame)
+		} else {
+			drawFrame([]) // Clear canvas if not active
+		}
+	}, [active, frame])
 
-  return (
-    <Box sx={{ border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 1, overflow: 'hidden' }}>
-      <canvas
-        ref={canvasRef}
-        style={{ width: '100%', height: '20px', display: 'block' }}
-      />
-    </Box>
-  );
+	return (
+		<Box sx={{ border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: 1, overflow: 'hidden' }}>
+			<canvas ref={canvasRef} style={{ width: '100%', height: '20px', display: 'block' }} />
+		</Box>
+	)
 }

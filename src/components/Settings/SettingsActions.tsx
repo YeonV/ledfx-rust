@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { FileUpload, FileDownload, DeleteForever as DeleteForeverIcon } from "@mui/icons-material";
-import { commands } from "../../lib/rust";
-import { useStore } from "../../store/useStore";
-import { IconBtn } from "../base/IconBtn";
+import { commands } from "@/lib/rust";
+import { useStore } from "@/store/useStore";
+import { IconBtn } from "@/components/base/IconBtn";
 import { ConfirmClearDialog } from './ConfirmClearDialog';
 import { ExportDialog } from './ExportDialog';
 

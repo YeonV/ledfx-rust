@@ -2,7 +2,7 @@
 import { useState, useMemo, useRef, useEffect, MouseEvent } from 'react';
 import { Paper, Box, Typography, TextField, InputAdornment, IconButton } from '@mui/material';
 import { Search, Clear, DragIndicator, BugReport } from '@mui/icons-material';
-import { useStore } from '../../store/useStore';
+import { useStore } from '@/store/useStore';
 import { IconBtn } from '../base/IconBtn';
 import JsonTreeView from './JsonTreeView';
 

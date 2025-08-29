@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Select, MenuItem, FormControl, InputLabel, Button, Box, TextField, Popover, Typography, IconButton, ListSubheader } from '@mui/material';
 import { Save as SaveIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import type { PresetCollection, EffectConfig } from '../../../lib/rust';
-import { deepEqual } from '../../../utils/deepEqual';
+import type { PresetCollection, EffectConfig } from '@/lib/rust';
+import { deepEqual } from '@/utils/deepEqual';
 
 
 interface PresetManagerProps {

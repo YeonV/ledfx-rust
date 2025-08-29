@@ -1,9 +1,9 @@
 import { useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { useStore } from "../../store/useStore";
-import { Wled } from "../base/Icons/Icons";
-import { IconBtn } from "../base/IconBtn";
-import { type WledDevice, type Device, commands } from "../../lib/rust";
+import { useStore } from "@/store/useStore";
+import { Wled } from "@/components/base/Icons/Icons";
+import { IconBtn } from "@/components/base/IconBtn";
+import { type WledDevice, type Device, commands } from "@/lib/rust";
 
 export function WledDiscoverer() {
   const { isScanning, setIsScanning, setError, duration } = useStore();

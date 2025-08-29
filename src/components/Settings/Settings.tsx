@@ -1,21 +1,15 @@
 // src/components/Settings.tsx
 
 import { useEffect } from "react";
-import { commands } from "../../lib/rust";
+import { commands } from "@/lib/rust";
 import {
     Stack,
     Slider,
     Typography,
     Card,
-    // CardHeader,
-    // FormControl,
-    // InputLabel,
     Select,
     MenuItem,
     SelectChangeEvent,
-    // CardContent,
-    // ToggleButtonGroup,
-    // ToggleButton,
     IconButton,
     Accordion,
     AccordionSummary,
@@ -24,9 +18,8 @@ import {
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import SpeedIcon from '@mui/icons-material/Speed';
 import SettingsIcon from "@mui/icons-material/Settings";
-// import YZLogo2 from "../Icons/YZ-Logo2";
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
-import { useStore } from "../../store/useStore";
+import { useStore } from "@/store/useStore";
 import DspSettings from "./DspSettings";
 import { ArrowDropDown, Close, SettingsSuggest } from "@mui/icons-material";
 import { SettingsRow } from "./SettingsRow";
@@ -67,25 +60,6 @@ export function Settings() {
                 </IconButton>
             </Stack>
             </Card>
-            {/* <Card variant="outlined">
-                <CardContent>
-                    <Stack direction={'row'} justifyContent="space-between" alignItems="center">
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                            <YZLogo2 />
-                            <Typography variant="body2" pr={2}>Engine Mode:</Typography>
-                        </Stack>
-                        <ToggleButtonGroup
-                            color="primary"
-                            value={engineMode}
-                            exclusive
-                            onChange={(_event, newAlignment) => setEngineMode(newAlignment)}
-                        >
-                            <ToggleButton value="legacy">Legacy</ToggleButton>
-                            <ToggleButton value="blade">Blade</ToggleButton>
-                        </ToggleButtonGroup>
-                    </Stack>
-                </CardContent>
-            </Card> */}
             <SettingsRow icon={<TrackChangesIcon />} title={`Scan Duration: ${duration}s`}>
                 <Slider
                     value={duration}

@@ -1,10 +1,10 @@
 import { Box } from '@mui/material';
 import { PlayArrow, Pause } from '@mui/icons-material';
-import { useStore } from '../../store/useStore';
-import { commands } from '../../lib/rust';
+import { useStore } from '@/store/useStore';
+import { commands } from '@/lib/rust';
 import { SettingsFab } from '../Settings/SettingsFab';
 import { MelbankVisualizerFab } from '../MelbankVisualizer/MelbankVisualizerFab';
-import { checkEnvironment, isDev } from '../../utils/environment';
+import { checkEnvironment, isDev } from '@/utils/environment';
 import { useEffect } from 'react';
 import { SettingsActions } from '../Settings/SettingsActions';
 import { IconBtn } from '../base/IconBtn';

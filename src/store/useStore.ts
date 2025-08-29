@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings, PresetCollection, Scene } from '../lib/rust';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings, PresetCollection, Scene } from '@/lib/rust';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
