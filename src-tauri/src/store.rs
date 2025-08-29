@@ -19,7 +19,7 @@ pub struct ScenePreset { // <-- Create a simple struct for the preset data
 #[serde(tag = "type", content = "data", rename_all = "camelCase")]
 pub enum SceneEffect {
     // Both variants are now tuple-like, containing a struct
-    Preset(ScenePreset), 
+    Preset(ScenePreset),
     Custom(EffectConfig),
 }
 
