@@ -1,9 +1,9 @@
-import { useCallback, useEffect } from "react";
+import type { Virtual, EffectConfig, EffectSetting, EffectInfo } from "../../lib/rust";
+import { commands } from "../../lib/rust";
+import { useCallback } from "react";
 import { VirtualCard } from "./VirtualCard/VirtualCard";
-import { commands } from "../bindings";
-import { useStore } from "../store/useStore";
+import { useStore } from "../../store/useStore";
 import { Grid } from "@mui/material";
-import type { Virtual, EffectConfig, EffectSetting, EffectInfo } from "../bindings";
 
 const buildConfigPayload = (effectId: string, settings: Record<string, any>, availableEffects: EffectInfo[]): EffectConfig | null => {
     const effectInfo = availableEffects.find(e => e.id === effectId);
@@ -23,13 +23,8 @@ export function Virtuals() {
     effectSchemas, setEffectSchemas,
     effectSettings, setEffectSettings,
     availableEffects,
-    setPresetsForEffect, // For invalidating cache on change
+    setPresetsForEffect,
   } = useStore();
-
-  useEffect(() => {
-    // This effect is now removed as per your new architecture decision.
-    // We will no longer auto-start effects.
-  }, []);
 
   const handleEffectSelection = useCallback(
     async (virtual: Virtual, newEffectId: string) => {

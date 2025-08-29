@@ -1,6 +1,6 @@
 import { useStore } from "../../store/useStore";
-import { WledDiscoverer } from "../WledDiscoverer";
-import { AddButton } from "../AddButton";
+import { WledDiscoverer } from "../WLED/WledDiscoverer";
+import { AddButton } from "../Virtuals/AddButton";
 import { Box } from "@mui/material";
 
 export function LeftActions() {

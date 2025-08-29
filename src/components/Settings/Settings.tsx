@@ -1,7 +1,7 @@
 // src/components/Settings.tsx
 
 import { useEffect } from "react";
-import { commands } from "../../bindings";
+import { commands } from "../../lib/rust";
 import {
     Stack,
     Slider,

@@ -86,9 +86,8 @@ export const VirtualCard = memo(({
               <TuneIcon />
           </Button>
         </Stack>
-        {schema && settings && <Collapse in={openEffectSettings} sx={{ mt: settings && openEffectSettings ? 1.5 : 0, border: '1px solid #444', borderRadius: '4px', overflow: 'hidden', minHeight: 1 }}>
-          <Box px={2}>
-            {/* --- START: PASS NEW PROPS --- */}
+        {schema && settings && <Collapse in={openEffectSettings} sx={{ mt: 0, p:0, overflow: 'hidden', minHeight: 1 }}>
+          <Box px={0}>
             <EffectSettings 
               schema={schema} 
               settings={settings} 
@@ -98,7 +97,6 @@ export const VirtualCard = memo(({
               onPresetSave={onPresetSave}
               onPresetDelete={onPresetDelete}
             />
-            {/* --- END: PASS NEW PROPS --- */}
           </Box>
         </Collapse>}
       </CardContent>

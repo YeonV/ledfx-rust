@@ -3,7 +3,7 @@ import { Box, Popover, Typography, List, ListItem, ListItemText, IconButton, Div
 import { Collections as SceneIcon, PlayArrow as PlayArrowIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { commands } from '../../bindings';
 import { useStore } from '../../store/useStore';
-import { IconBtn } from '../IconBtn';
+import { IconBtn } from '../base/IconBtn';
 import { SaveSceneDialog } from './SaveSceneDialog';
 
 export const ScenesFab = () => {

@@ -1,7 +1,7 @@
 import { useStore } from "../../store/useStore";
 import { Equalizer } from "@mui/icons-material";
 import { Drawer } from "@mui/material";
-import { IconBtn } from "../IconBtn";
+import { IconBtn } from "../base/IconBtn";
 import MelbankVisualizer from "./MelbankVisualizer";
 
 /**

@@ -11,9 +11,6 @@ use std::collections::VecDeque;
 use std::f32::consts::PI;
 use std::sync::{mpsc, Arc, Mutex};
 
-// --- SNIP --- Functions from get_desktop_devices_impl to find_device are correct and unchanged ---
-// ...
-
 pub fn get_desktop_devices_impl() -> Result<super::AudioDevicesInfo, String> {
     let host = cpal::default_host();
     let mut input_devices: Vec<super::AudioDevice> = Vec::new();

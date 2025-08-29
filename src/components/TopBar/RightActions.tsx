@@ -6,8 +6,8 @@ import { SettingsFab } from '../Settings/SettingsFab';
 import { MelbankVisualizerFab } from '../MelbankVisualizer/MelbankVisualizerFab';
 import { checkEnvironment, isDev } from '../../utils/environment';
 import { useEffect } from 'react';
-import { SettingsActions } from '../SettingsActions';
-import { IconBtn } from '../IconBtn';
+import { SettingsActions } from '../Settings/SettingsActions';
+import { IconBtn } from '../base/IconBtn';
 import { ScenesFab } from '../Scenes/ScenesFab'; // <-- Import the new component
 import DevTools from '../DevTools';
 

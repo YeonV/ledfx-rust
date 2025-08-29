@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Button, Stack } from "@mui/material";
 import { FileUpload, FileDownload, DeleteForever as DeleteForeverIcon } from "@mui/icons-material";
-import { commands } from "../bindings";
-import { useStore } from "../store/useStore";
-import { IconBtn } from "./IconBtn";
-import { ConfirmClearDialog } from './ConfirmClearDialog'; // Import the new dialog
+import { commands } from "../../lib/rust";
+import { useStore } from "../../store/useStore";
+import { IconBtn } from "../base/IconBtn";
+import { ConfirmClearDialog } from './ConfirmClearDialog';
 import { ExportDialog } from './ExportDialog';
 
 export const SettingsActions = () => {
@@ -19,7 +18,7 @@ export const SettingsActions = () => {
       let frontendState = {};
 
       if (includeEngine) {
-        const result = await commands.exportSettings(); // This gets the full engine state
+        const result = await commands.exportSettings();
         if (result.status === 'ok') {
           engineState = JSON.parse(result.data);
         } else {
@@ -29,13 +28,13 @@ export const SettingsActions = () => {
       }
 
       if (includeFrontend) {
-        // Zustand's persist middleware stores the partial state as a stringified object.
+
         const persistedStateString = localStorage.getItem('ledfx-store');
         if (persistedStateString) {
           frontendState = JSON.parse(persistedStateString).state;
         }
       }
-      
+
       const finalExportObject = {
         ...(includeEngine && { engine_state: engineState }),
         ...(includeFrontend && { frontend_state: frontendState }),
@@ -60,12 +59,12 @@ export const SettingsActions = () => {
       }
     }
   };
-    const handleImport = () => {
+  const handleImport = () => {
     setError(null);
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    
+
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
@@ -74,30 +73,30 @@ export const SettingsActions = () => {
       reader.onload = async (event) => {
         try {
           const fileContent = event.target?.result as string;
-          // 1. Parse the full imported configuration from the file content
+
           const importedData = JSON.parse(fileContent);
 
-          // 2. Handle the engine state
+
           if (importedData.engine_state) {
-            // Create a new string containing ONLY the engine_state part.
+
             const engineStateString = JSON.stringify(importedData.engine_state);
 
-            // Send ONLY the engine state to the backend command.
+
             const result = await commands.importSettings(engineStateString);
-            
+
             if (result.status === 'ok') {
-              // Tell the engine to reload its state. It will emit events
-              // to update the frontend's devices, virtuals, etc.
+
+
               await commands.triggerReload();
             } else {
               setError(result.error);
-              return; // Stop if the backend fails
+              return;
             }
           }
 
-          // 3. Handle the frontend state
+
           if (importedData.frontend_state) {
-            // Directly update the Zustand store with the frontend-specific settings.
+
             useStore.setState(importedData.frontend_state);
           }
         } catch (err) {
@@ -107,25 +106,25 @@ export const SettingsActions = () => {
       };
       reader.readAsText(file);
     };
-    
+
     input.click();
   };
 
-const handleConfirmClear = async () => {
+  const handleConfirmClear = async () => {
     setIsConfirmOpen(false);
     setError(null);
     try {
       const defaultStateResult = await commands.getDefaultEngineState();
-      
+
       if (defaultStateResult.status === 'ok') {
         const defaultState = defaultStateResult.data;
-        
+
         const emptyStatePayload = {
           devices: {},
           virtuals: {},
           dsp_settings: defaultState.dsp_settings
         };
-        
+
         const importResult = await commands.importSettings(JSON.stringify(emptyStatePayload));
 
         if (importResult.status === 'ok') {

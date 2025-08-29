@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { EffectSetting, PresetCollection } from '../../bindings';
 import { Box, Slider, Typography, FormControl, InputLabel, Select, MenuItem, Stack, Button, Divider } from '@mui/material';
-import GradientPicker from '../GradientPicker/GradientPicker';
+import GradientPicker from '../base/GradientPicker/GradientPicker';
 import { commands } from '../../bindings';
 import { useStore } from '../../store/useStore';
 import { PresetManager } from './PresetManager';
@@ -56,8 +56,7 @@ export function EffectSettings({ schema, settings, onSettingChange, effectId, on
             onSave={onPresetSave}
             onDelete={onPresetDelete}
         />
-        <Divider sx={{ my: 2 }} />
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', px: 1.5, mt: 1.5, border: '1px solid #444', borderRadius: '4px',  }}>
         {sortedSchema.map((setting, index) => {
             const value = settings[setting.id] ?? setting.defaultValue;
 
