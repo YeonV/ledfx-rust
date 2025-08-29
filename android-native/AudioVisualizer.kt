@@ -1,5 +1,3 @@
-// src-tauri/gen/android/app/src/main/java/com/blade/ledfx_rust/AudioVisualizer.kt
-
 package com.blade.ledfx_rust
 
 import android.media.audiofx.Visualizer
@@ -8,34 +6,34 @@ import android.util.Log
 class AudioVisualizer {
     private var visualizer: Visualizer? = null
 
-    // This is the native Rust function we will call from Kotlin.
-    private external fun onFftDataCapture(fft: ByteArray, samplingRate: Int)
+    // This must match the name in android.rs (without the Java_... prefix)
+    private external fun onPcmDataCapture(pcm: ByteArray, samplingRate: Int)
 
     fun start() {
         Log.d("LedFxRust", "Attempting to start audio visualizer...")
         try {
-            // A session ID of 0 captures the global audio mix.
             visualizer = Visualizer(0).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[1] // Get the max capture size
+                captureSize = Visualizer.getCaptureSizeRange()[1]
                 
                 setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                    // --- THE FIX: We now capture Waveform data ---
                     override fun onWaveFormDataCapture(
                         visualizer: Visualizer,
                         waveform: ByteArray,
                         samplingRate: Int
                     ) {
-                        // We don't need the waveform data.
+                        // Pass the raw PCM waveform data to Rust
+                        onPcmDataCapture(waveform, samplingRate)
                     }
 
+                    // We no longer need the FFT data from here.
                     override fun onFftDataCapture(
                         visualizer: Visualizer,
                         fft: ByteArray,
                         samplingRate: Int
-                    ) {
-                        // This is the magic. Call our native Rust function with the FFT data.
-                        onFftDataCapture(fft, samplingRate)
-                    }
-                }, Visualizer.getMaxCaptureRate() / 2, false, true) // Capture FFT, not waveform
+                    ) {}
+                // --- THE FIX: Request WAVEFORM, not FFT ---
+                }, Visualizer.getMaxCaptureRate(), true, false) 
 
                 enabled = true
             }
