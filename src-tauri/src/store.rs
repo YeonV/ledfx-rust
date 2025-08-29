@@ -57,9 +57,18 @@ fn get_settings_path(app_handle: &AppHandle) -> PathBuf {
 
 pub fn load_engine_state(app_handle: &AppHandle) -> EngineState {
     let path = get_settings_path(app_handle);
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|content| serde_json::from_str(&content).ok())
+    let content = fs::read_to_string(path).ok();
+
+    // --- START: FINAL DEBUG LOG ---
+    if let Some(ref text) = content {
+        println!("[LOAD STATE] Read from file: {}", text);
+    } else {
+        println!("[LOAD STATE] No settings file found. Using default state.");
+    }
+    // --- END: FINAL DEBUG LOG ---
+
+    content
+        .and_then(|c| serde_json::from_str(&c).ok())
         .unwrap_or_default()
 }
 
@@ -69,14 +78,14 @@ pub fn save_engine_state(app_handle: &AppHandle, engine_state: &EngineState) {
     fs::write(path, json_string).expect("Failed to write to settings file");
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn set_api_port(app_handle: AppHandle, port: u16) -> Result<(), String> {
-    let mut state = load_engine_state(&app_handle);
-    state.api_port = port;
-    save_engine_state(&app_handle, &state);
-    Ok(())
-}
+// #[tauri::command]
+// #[specta::specta]
+// pub fn set_api_port(app_handle: AppHandle, port: u16) -> Result<(), String> {
+//     let mut state = load_engine_state(&app_handle);
+//     state.api_port = port;
+//     save_engine_state(&app_handle, &state);
+//     Ok(())
+// }
 
 #[tauri::command]
 #[specta::specta]

@@ -1,9 +1,11 @@
 use super::commands::EngineCommand;
-use super::generated::{config_to_value, create_effect, get_built_in_presets_for_effect};
+use super::generated::{
+    config_to_value, create_effect, get_built_in_presets_for_effect, get_effect_id_from_config,
+    EffectConfig,
+};
 use super::state::{ActiveEffectsState, ActiveVirtual, PlaybackState};
 use crate::api::ApiCommand;
 use crate::audio::AudioCommand;
-use crate::engine::EffectConfig;
 use crate::store::{self, EngineState, Scene, SceneEffect};
 use crate::types::{Device, MatrixCell, Virtual};
 use std::collections::HashMap;
@@ -16,7 +18,6 @@ fn emit_virtuals_update(virtuals: &HashMap<String, ActiveVirtual>, app_handle: &
         .emit("virtuals-changed", &virtual_configs)
         .unwrap();
 }
-
 fn emit_devices_update(devices: &HashMap<String, Device>, app_handle: &AppHandle) {
     let device_list: Vec<Device> = devices.values().cloned().collect();
     app_handle.emit("devices-changed", &device_list).unwrap();
@@ -46,7 +47,6 @@ pub fn handle_command(
     app_handle: &AppHandle,
 ) -> bool {
     let mut should_save_state = false;
-
     match command {
         EngineCommand::SetApiPort(port) => {
             println!("[ENGINE] Setting API port to {}", port);
@@ -56,14 +56,12 @@ pub fn handle_command(
         }
         EngineCommand::RestartAudioCapture => {
             println!("[ENGINE] Forwarding RestartStream command to audio thread.");
-            audio_command_tx.send(AudioCommand::RestartStream).unwrap();
+            let _ = audio_command_tx.send(AudioCommand::RestartStream);
         }
         EngineCommand::UpdateDspSettings { settings } => {
             println!("[ENGINE] Updating DSP settings.");
             engine_state.dsp_settings = settings.clone();
-            audio_command_tx
-                .send(AudioCommand::UpdateSettings(settings.clone()))
-                .unwrap();
+            let _ = audio_command_tx.send(AudioCommand::UpdateSettings(settings.clone()));
             app_handle.emit("dsp-settings-changed", &settings).unwrap();
             should_save_state = true;
         }
@@ -232,31 +230,7 @@ pub fn handle_command(
                 }
             }
         }
-        EngineCommand::SetTargetFps { .. } => {
-            // This is handled in the main loop, but we need to match it.
-        }
-        EngineCommand::SavePreset {
-            effect_id,
-            preset_name,
-            settings,
-        } => {
-            engine_state
-                .effect_presets
-                .entry(effect_id)
-                .or_default()
-                .insert(preset_name, settings);
-            should_save_state = true;
-        }
-        EngineCommand::DeletePreset {
-            effect_id,
-            preset_name,
-        } => {
-            if let Some(effect_map) = engine_state.effect_presets.get_mut(&effect_id) {
-                if effect_map.remove(&preset_name).is_some() {
-                    should_save_state = true;
-                }
-            }
-        }
+        EngineCommand::SetTargetFps { .. } => { /* Handled in main loop */ }
         EngineCommand::SaveScene(scene) => {
             println!("[ENGINE] Saving scene '{}' ({})", scene.name, scene.id);
             engine_state.scenes.insert(scene.id.clone(), scene);
@@ -271,8 +245,8 @@ pub fn handle_command(
             }
         }
         EngineCommand::ActivateScene(scene_id) => {
-            println!("[ENGINE] Activating scene '{}'", scene_id);
             if let Some(scene) = engine_state.scenes.get(&scene_id) {
+                println!("[ENGINE] Activating scene '{}'", scene.name);
                 let mut new_selected_effects: HashMap<String, String> = HashMap::new();
                 let mut new_effect_settings: HashMap<String, HashMap<String, EffectConfig>> =
                     HashMap::new();
@@ -290,13 +264,13 @@ pub fn handle_command(
                                 .and_then(|presets| presets.get(&scene_preset.preset_name))
                                 .cloned()
                                 .or_else(|| {
-                                    let built_in =
-                                        get_built_in_presets_for_effect(&scene_preset.effect_id);
-                                    built_in.get(&scene_preset.preset_name).cloned()
+                                    get_built_in_presets_for_effect(&scene_preset.effect_id)
+                                        .get(&scene_preset.preset_name)
+                                        .cloned()
                                 }),
                         };
                         if let Some(config) = effect_config {
-                            let effect_id = super::generated::get_effect_id_from_config(&config);
+                            let effect_id = get_effect_id_from_config(&config);
                             new_selected_effects.insert(virtual_id.clone(), effect_id.clone());
                             new_effect_settings
                                 .entry(virtual_id.clone())
@@ -304,8 +278,6 @@ pub fn handle_command(
                                 .insert(effect_id.clone(), config.clone());
                             new_active_effects.insert(virtual_id.clone(), true);
                             active_virtual.effect = Some(create_effect(config));
-                        } else {
-                            println!("[ENGINE] Could not find preset/config for scene activation: virtual '{}' in scene '{}'", virtual_id, scene_id);
                         }
                     }
                 }
@@ -318,11 +290,8 @@ pub fn handle_command(
                     },
                     app_handle,
                 );
-            } else {
-                println!("[ENGINE] Could not find scene to activate: {}", scene_id);
             }
         }
     }
-
     should_save_state
 }

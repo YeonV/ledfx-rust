@@ -45,7 +45,7 @@ impl Default for DspSettings {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SharedDspSettings(pub Arc<Mutex<DspSettings>>);
 
 #[derive(Serialize, Clone, Type)]
@@ -109,7 +109,7 @@ pub fn highs_power(melbanks: &[f32]) -> f32 {
     slice.iter().sum::<f32>() / slice.len() as f32
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SharedAudioData(pub Arc<Mutex<AudioAnalysisData>>);
 
 #[cfg(target_os = "android")]

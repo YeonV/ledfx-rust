@@ -40,7 +40,7 @@ export const PresetManager = ({ presets, settings, onLoad, onSave, onDelete }: P
 			const presetConfig = allPresets[presetName] // This is an EffectConfig
 			if (!presetConfig || !presetConfig.config) continue
 
-			console.log(settings, presetConfig.config, deepEqual(settings, presetConfig.config))
+			// console.log(settings, presetConfig.config, deepEqual(settings, presetConfig.config))
 			// Compare the current settings with the preset's INNER config
 			if (deepEqual(settings, presetConfig.config)) {
 				matchedPreset = presetName
@@ -131,7 +131,7 @@ export const PresetManager = ({ presets, settings, onLoad, onSave, onDelete }: P
 			<IconButton onClick={handleSaveClick} color="primary" disabled={!isDirty}>
 				<SaveIcon />
 			</IconButton>
-			<IconButton onClick={handleDelete} color="error" disabled={!canDelete}>
+			<IconButton onClick={handleDelete} color="primary" disabled={!canDelete}>
 				<DeleteIcon />
 			</IconButton>
 

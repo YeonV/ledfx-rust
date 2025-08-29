@@ -1,8 +1,7 @@
-import type { Virtual, EffectConfig, EffectSetting, EffectInfo } from '@/lib/rust'
-import { commands } from '@/lib/rust'
-import { useCallback } from 'react'
-import { VirtualCard } from './VirtualCard/VirtualCard'
-import { useStore } from '@/store/useStore'
+import { useCallback, useEffect } from 'react'
+import { VirtualCard } from '@/components/Virtuals/VirtualCard/VirtualCard'
+import { commands, EffectConfig, EffectInfo, EffectSetting, Virtual } from '@lib/rust'
+import { useStore } from '@store/useStore'
 import { Grid } from '@mui/material'
 
 const buildConfigPayload = (
@@ -34,6 +33,11 @@ export function Virtuals() {
 		setPresetsForEffect
 	} = useStore()
 
+	useEffect(() => {
+		// Clean startup
+	}, [])
+
+	// --- REVERTED TO YOUR WORKING VERSION ---
 	const handleEffectSelection = useCallback(
 		async (virtual: Virtual, newEffectId: string) => {
 			const virtualId = virtual.id
@@ -64,11 +68,20 @@ export function Virtuals() {
 				setEffectSettings(newSettings)
 
 				if (activeEffects[virtualId]) {
-					handleStartEffect(virtual, newEffectId, defaultSettings)
+					// Pass defaultSettings to start effect
+					const configPayload = buildConfigPayload(newEffectId, defaultSettings, availableEffects)
+					if (configPayload) {
+						await commands.startEffect(virtual.id, configPayload)
+					}
 				}
 			} else {
 				if (activeEffects[virtualId]) {
-					handleStartEffect(virtual, newEffectId)
+					// Pass existing settings to start effect
+					const existingSettings = effectSettings[virtualId]?.[newEffectId]
+					const configPayload = buildConfigPayload(newEffectId, existingSettings, availableEffects)
+					if (configPayload) {
+						await commands.startEffect(virtual.id, configPayload)
+					}
 				}
 			}
 		},
@@ -77,12 +90,14 @@ export function Virtuals() {
 			effectSchemas,
 			effectSettings,
 			selectedEffects,
+			availableEffects,
 			setEffectSchemas,
 			setSelectedEffects,
 			setEffectSettings
 		]
 	)
 
+	// --- REVERTED TO YOUR WORKING VERSION ---
 	const handleSettingsChange = useCallback(
 		(virtualId: string, id: string, value: any) => {
 			const effectId = selectedEffects[virtualId]
@@ -105,17 +120,14 @@ export function Virtuals() {
 		[activeEffects, effectSettings, selectedEffects, availableEffects, setEffectSettings]
 	)
 
+	// --- REVERTED TO YOUR WORKING VERSION (with a small simplification) ---
 	const handleStartEffect = useCallback(
-		async (virtual: Virtual, effectIdOverride?: string, settingsOverride?: Record<string, any>) => {
-			const effectId = effectIdOverride || selectedEffects[virtual.id]
-			const settings = settingsOverride || effectSettings[virtual.id]?.[effectId]
-
-			if (!effectId || !settings) {
-				return
-			}
+		async (virtual: Virtual) => {
+			const effectId = selectedEffects[virtual.id]
+			const settings = effectSettings[virtual.id]?.[effectId]
+			if (!effectId || !settings) return
 
 			const configPayload = buildConfigPayload(effectId, settings, availableEffects)
-
 			if (configPayload) {
 				try {
 					await commands.startEffect(virtual.id, configPayload)
@@ -128,6 +140,7 @@ export function Virtuals() {
 		[activeEffects, selectedEffects, effectSettings, availableEffects, setActiveEffects]
 	)
 
+	// --- REVERTED TO YOUR WORKING VERSION ---
 	const handleStopEffect = useCallback(
 		async (virtualId: string) => {
 			try {
@@ -140,15 +153,14 @@ export function Virtuals() {
 		[activeEffects, setActiveEffects]
 	)
 
+	// --- REVERTED TO YOUR WORKING VERSION ---
 	const handlePresetLoad = useCallback(
 		(virtualId: string, newSettings: EffectConfig) => {
 			const effectId = selectedEffects[virtualId]
 			if (!effectId) return
 
-			// --- START: THE FIX ---
-			// `newSettings` IS the settings object, not an array containing it.
+			// Your version of this was almost right, but it needed to access .config
 			const settingsObject = newSettings.config
-			// --- END: THE FIX ---
 
 			const newSettingsForEffect = { ...effectSettings[virtualId]?.[effectId], ...settingsObject }
 			setEffectSettings({
@@ -166,23 +178,27 @@ export function Virtuals() {
 		[selectedEffects, effectSettings, activeEffects, availableEffects, setEffectSettings]
 	)
 
+	// --- THIS IS THE ONLY FUNCTION THAT NEEDED A REAL CHANGE ---
 	const handlePresetSave = useCallback(
 		async (virtualId: string, presetName: string) => {
 			const effectId = selectedEffects[virtualId]
 			const settings = effectSettings[virtualId]?.[effectId]
 			if (!effectId || !settings) return
 
-			// The backend's newtype expects just the Value, so we pass the object directly.
-			const settingsPayload = settings as EffectConfig
+			// This is the one fix: build the full EffectConfig payload
+			const settingsPayload = buildConfigPayload(effectId, settings, availableEffects)
 
-			const result = await commands.savePreset(effectId, presetName, settingsPayload)
-			if (result.status === 'ok') {
-				setPresetsForEffect(effectId, null as any)
+			if (settingsPayload) {
+				const result = await commands.savePreset(effectId, presetName, settingsPayload)
+				if (result.status === 'ok') {
+					setPresetsForEffect(effectId, null as any)
+				}
 			}
 		},
-		[selectedEffects, effectSettings, setPresetsForEffect]
+		[selectedEffects, effectSettings, availableEffects, setPresetsForEffect]
 	)
 
+	// --- REVERTED TO YOUR WORKING VERSION ---
 	const handlePresetDelete = useCallback(
 		async (virtualId: string, presetName: string) => {
 			const effectId = selectedEffects[virtualId]

@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { commands, DspSettings as DspSettingsType } from '../../bindings'
+import { useEffect, useState } from 'react'
+import { commands } from '../../bindings'
 import {
 	Stack,
 	Slider,
@@ -12,9 +12,9 @@ import {
 	Accordion,
 	AccordionSummary,
 	AccordionDetails,
-	TextField, // <-- Import TextField
-	Alert,
-	Box // <-- Import Alert
+	TextField,
+	Box,
+	Button
 } from '@mui/material'
 import TrackChangesIcon from '@mui/icons-material/TrackChanges'
 import SpeedIcon from '@mui/icons-material/Speed'
@@ -22,7 +22,14 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import VolumeUpIcon from '@mui/icons-material/VolumeUp'
 import { useStore } from '../../store/useStore'
 import DspSettings from './DspSettings'
-import { ArrowDropDown, Close, SettingsSuggest, Language } from '@mui/icons-material' // <-- Import Language icon
+import {
+	ArrowDropDown,
+	Close,
+	SettingsSuggest,
+	Language,
+	Save as SaveIcon,
+	RestartAlt as RestartAltIcon
+} from '@mui/icons-material'
 import { SettingsRow } from './SettingsRow'
 
 export function Settings() {
@@ -35,14 +42,29 @@ export function Settings() {
 		selectedAudioDevice,
 		setSelectedAudioDevice,
 		setOpenSettings,
-		apiPort,
+		apiPort: savedApiPort,
 		setApiPort
 	} = useStore()
 
+	const [localApiPort, setLocalApiPort] = useState(savedApiPort)
+	const [defaultApiPort, setDefaultApiPort] = useState(savedApiPort || 3030) // Store the default
+
+	// Fetch the default port when the component mounts
+	useEffect(() => {
+		commands.getDefaultEngineState().then((result) => {
+			if (result.status === 'ok' && result.data.api_port) {
+				setDefaultApiPort(result.data.api_port)
+			}
+		})
+	}, [])
+
+	useEffect(() => {
+		setLocalApiPort(savedApiPort)
+	}, [savedApiPort])
+
 	const handleAudioDeviceChange = (event: SelectChangeEvent<string>) => {
-		const deviceName = event.target.value
-		setSelectedAudioDevice(deviceName)
-		commands.setAudioDevice(deviceName).catch(console.error)
+		setSelectedAudioDevice(event.target.value)
+		commands.setAudioDevice(event.target.value).catch(console.error)
 	}
 
 	useEffect(() => {
@@ -52,14 +74,24 @@ export function Settings() {
 		return () => clearTimeout(handler)
 	}, [targetFps])
 
-	// --- START: NEW HANDLER FOR API PORT ---
-	const handleApiPortChange = (port: number) => {
-		// Update the backend. This saves the setting to disk.
-		commands.setApiPort(port).catch(console.error)
-		// Update our local state so the UI reflects the change immediately.
-		setApiPort(port)
+	const handleSaveApiPort = () => {
+		commands
+			.setApiPort(localApiPort)
+			.then((result) => {
+				if (result.status === 'ok') {
+					setApiPort(localApiPort)
+				}
+			})
+			.catch(console.error)
 	}
-	// --- END: NEW HANDLER FOR API PORT ---
+
+	// --- START: NEW RESET HANDLER ---
+	const handleResetApiPort = () => {
+		setLocalApiPort(defaultApiPort)
+	}
+	// --- END: NEW RESET HANDLER ---
+
+	const isPortDirty = localApiPort !== savedApiPort
 
 	return (
 		<Stack spacing={0}>
@@ -98,37 +130,53 @@ export function Settings() {
 				/>
 			</SettingsRow>
 			<SettingsRow icon={<VolumeUpIcon />} title={'Audio Input'}>
-				<Select fullWidth value={selectedAudioDevice} onChange={handleAudioDeviceChange}>
+				<Select
+					disableUnderline
+					size="small"
+					variant="standard"
+					label="Audio Device"
+					value={selectedAudioDevice}
+					onChange={handleAudioDeviceChange}
+				>
 					{audioDevices.map((device) => (
-						<MenuItem key={device.name} value={device.name}>
-							{device.name}
+						<MenuItem key={device.name} value={device.name} sx={{ justifyContent: 'space-between', display: 'flex' }}>
+							<Typography variant="body2" pr={2} display={'inline-flex'}>
+								{device.name.startsWith('System Audio') ? '🔊' : '🎤'}{' '}
+								{device.name.replace('System Audio ', '').split(' (')[0].replace('(', '')}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" display={'inline-flex'}>
+								{'(' + device.name.replace('System Audio ', '').split(' (')[1].replace('))', ')')}
+							</Typography>
 						</MenuItem>
 					))}
 				</Select>
 			</SettingsRow>
 
-			{/* --- START: NEW API SETTINGS SECTION --- */}
 			<Accordion elevation={0} defaultExpanded>
 				<AccordionSummary expandIcon={<ArrowDropDown />}>
 					<Language sx={{ mr: 2 }} />
 					<Typography variant="h6">API Server</Typography>
 				</AccordionSummary>
-				<AccordionDetails sx={{ p: 0 }}>
+				<AccordionDetails sx={{ p: 2, pt: 0 }}>
 					<SettingsRow title="Server Port">
-						<TextField
-							type="number"
-							size="small"
-							value={apiPort || 3030}
-							onChange={(e) => handleApiPortChange(parseInt(e.target.value, 10) || 3030)}
-							inputProps={{ min: 1024, max: 65535 }}
-						/>
+						<Stack direction="row" alignItems="center">
+							<IconButton onClick={handleSaveApiPort} disabled={!isPortDirty} size="small" sx={{ mr: 1 }}>
+								<SaveIcon />
+							</IconButton>
+							<IconButton onClick={handleResetApiPort} disabled={!isPortDirty} size="small" sx={{ mr: 1 }}>
+								<RestartAltIcon />
+							</IconButton>
+							<TextField
+								type="number"
+								size="small"
+								value={localApiPort}
+								onChange={(e) => setLocalApiPort(parseInt(e.target.value, 10) || 3030)}
+								inputProps={{ min: 1024, max: 65535 }}
+							/>
+						</Stack>
 					</SettingsRow>
-					<Box sx={{ px: 2, pb: 2 }}>
-						<Alert severity="info">A restart of the application is required for port changes to take effect.</Alert>
-					</Box>
 				</AccordionDetails>
 			</Accordion>
-			{/* --- END: NEW API SETTINGS SECTION --- */}
 
 			<Accordion elevation={0}>
 				<AccordionSummary expandIcon={<ArrowDropDown />}>

@@ -1,5 +1,6 @@
 use crate::audio::DspSettings;
-use crate::store::Scene;
+use crate::engine::EffectConfig;
+use crate::store::{EngineState, Scene};
 use crate::types::{Device, Virtual};
 use serde::Serialize;
 use specta::Type;
@@ -53,4 +54,16 @@ pub enum EngineRequest {
     GetPlaybackState(Sender<PlaybackState>),
     GetPresets(String, Sender<PresetCollection>),
     GetScenes(Sender<Vec<Scene>>),
+    GetFullState(Sender<EngineState>),
+    SavePreset {
+        effect_id: String,
+        preset_name: String,
+        settings: EffectConfig,
+        responder: Sender<()>,
+    },
+    DeletePreset {
+        effect_id: String,
+        preset_name: String,
+        responder: Sender<()>,
+    },
 }

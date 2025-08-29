@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
 	Button,
 	Dialog,
@@ -17,8 +17,12 @@ import {
 	Select,
 	MenuItem,
 	Divider,
-	ListSubheader
+	ListSubheader,
+	Popover,
+	IconButton,
+	Tooltip
 } from '@mui/material'
+import { Save as SaveIcon } from '@mui/icons-material'
 import { useStore } from '@/store/useStore'
 import { commands, Scene, SceneEffect, EffectConfig } from '@/lib/rust'
 import { deepEqual } from '@/utils/deepEqual'
@@ -29,27 +33,29 @@ interface SaveSceneDialogProps {
 }
 
 export const SaveSceneDialog = ({ open, onClose }: SaveSceneDialogProps) => {
-	const { activeEffects, selectedEffects, effectSettings, presetCache, virtuals } = useStore()
+	const { activeEffects, selectedEffects, effectSettings, presetCache, virtuals, setPresetsForEffect } = useStore()
 	const [sceneName, setSceneName] = useState('My New Scene')
 	const [includedVirtuals, setIncludedVirtuals] = useState<Record<string, boolean>>({})
 	const [virtualSceneEffects, setVirtualSceneEffects] = useState<Record<string, SceneEffect>>({})
+
+	// --- START: NEW STATE FOR THE SAVE PRESET POPOVER ---
+	const [savePresetAnchorEl, setSavePresetAnchorEl] = useState<HTMLElement | null>(null)
+	const [presetToSaveInfo, setPresetToSaveInfo] = useState<{ virtualId: string; effectId: string } | null>(null)
+	const [newPresetName, setNewPresetName] = useState('')
+	// --- END: NEW STATE ---
 
 	useEffect(() => {
 		if (open) {
 			const initialIncludes: Record<string, boolean> = {}
 			const initialEffects: Record<string, SceneEffect> = {}
-
 			for (const virtualId in activeEffects) {
 				if (!activeEffects[virtualId]) continue
 				initialIncludes[virtualId] = true
-
 				const effectId = selectedEffects[virtualId]
 				const settings = effectSettings[virtualId]?.[effectId]
 				if (!effectId || !settings) continue
-
 				const presets = presetCache[effectId]
 				const allPresets = { ...(presets?.user || {}), ...(presets?.built_in || {}) }
-
 				let match: string | null = null
 				for (const presetName in allPresets) {
 					if (deepEqual(settings, allPresets[presetName]?.config)) {
@@ -71,20 +77,17 @@ export const SaveSceneDialog = ({ open, onClose }: SaveSceneDialogProps) => {
 
 	const handleSaveScene = async () => {
 		if (!sceneName.trim()) return
-
 		const finalVirtualEffects: Record<string, SceneEffect> = {}
 		for (const virtualId in includedVirtuals) {
 			if (includedVirtuals[virtualId] && virtualSceneEffects[virtualId]) {
 				finalVirtualEffects[virtualId] = virtualSceneEffects[virtualId]
 			}
 		}
-
 		const scenePayload: Scene = {
 			id: `scene_${Date.now()}`,
 			name: sceneName.trim(),
 			virtual_effects: finalVirtualEffects
 		}
-
 		await commands.saveScene(scenePayload)
 		onClose()
 	}
@@ -110,6 +113,31 @@ export const SaveSceneDialog = ({ open, onClose }: SaveSceneDialogProps) => {
 		}
 		return 'CUSTOM'
 	}
+
+	// --- START: NEW HANDLERS FOR SAVE PRESET POPOVER ---
+	const handleOpenSavePresetPopover = (event: React.MouseEvent<HTMLElement>, virtualId: string, effectId: string) => {
+		setPresetToSaveInfo({ virtualId, effectId })
+		setSavePresetAnchorEl(event.currentTarget)
+	}
+
+	const handleConfirmSavePreset = async () => {
+		if (presetToSaveInfo && newPresetName.trim()) {
+			const { virtualId, effectId } = presetToSaveInfo
+			const settings = effectSettings[virtualId]?.[effectId]
+			if (!settings) return
+
+			const payload = { type: effectId as any, config: settings } as EffectConfig
+			await commands.savePreset(effectId, newPresetName.trim(), payload)
+
+			setPresetsForEffect(effectId, null as any)
+			handlePresetSelectionForVirtual(virtualId, newPresetName.trim())
+
+			setSavePresetAnchorEl(null)
+			setNewPresetName('')
+			setPresetToSaveInfo(null)
+		}
+	}
+	// --- END: NEW HANDLERS ---
 
 	return (
 		<Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -142,6 +170,7 @@ export const SaveSceneDialog = ({ open, onClose }: SaveSceneDialogProps) => {
 							const hasUserPresets = presets && Object.keys(presets.user).length > 0
 							const hasBuiltInPresets = presets && Object.keys(presets.built_in).length > 0
 							const isFirst = index === 0
+							const isCustom = getPresetValueForVirtual(virtualId) === 'CUSTOM'
 
 							return (
 								<>
@@ -155,7 +184,7 @@ export const SaveSceneDialog = ({ open, onClose }: SaveSceneDialogProps) => {
 											/>
 											<ListItemText primary={virtual?.name || virtualId} secondary={`Effect: ${effectId}`} />
 										</Box>
-										<Box sx={{ pl: 6, width: '100%', pb: 1 }}>
+										<Box sx={{ display: 'flex', alignItems: 'center', pl: 6, width: '100%', pb: 1 }}>
 											<FormControl fullWidth size="small" margin="dense">
 												<InputLabel>Saved As</InputLabel>
 												<Select
@@ -182,6 +211,18 @@ export const SaveSceneDialog = ({ open, onClose }: SaveSceneDialogProps) => {
 														))}
 												</Select>
 											</FormControl>
+											{/* --- START: ADD SAVE PRESET BUTTON FOR CUSTOM SETTINGS --- */}
+											{isCustom && (
+												<Tooltip title="Save current settings as a new preset">
+													<IconButton
+														sx={{ ml: 1 }}
+														onClick={(e) => handleOpenSavePresetPopover(e, virtualId, effectId)}
+													>
+														<SaveIcon />
+													</IconButton>
+												</Tooltip>
+											)}
+											{/* --- END: ADD SAVE PRESET BUTTON --- */}
 										</Box>
 									</ListItem>
 								</>
@@ -193,6 +234,31 @@ export const SaveSceneDialog = ({ open, onClose }: SaveSceneDialogProps) => {
 				<Button onClick={onClose}>Cancel</Button>
 				<Button onClick={handleSaveScene}>Save Scene</Button>
 			</DialogActions>
+
+			{/* --- START: ADD SAVE PRESET POPOVER --- */}
+			<Popover
+				open={Boolean(savePresetAnchorEl)}
+				anchorEl={savePresetAnchorEl}
+				onClose={() => setSavePresetAnchorEl(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+				transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+			>
+				<Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 250 }}>
+					<Typography variant="subtitle2">Save as New Preset</Typography>
+					<TextField
+						autoFocus
+						label="Preset Name"
+						size="small"
+						value={newPresetName}
+						onChange={(e) => setNewPresetName(e.target.value)}
+						onKeyDown={(e) => e.key === 'Enter' && handleConfirmSavePreset()}
+					/>
+					<Button onClick={handleConfirmSavePreset} variant="contained">
+						Save Preset
+					</Button>
+				</Box>
+			</Popover>
+			{/* --- END: ADD SAVE PRESET POPOVER --- */}
 		</Dialog>
 	)
 }

@@ -11,7 +11,7 @@ export function SettingsRow({
 }) {
 	return (
 		<Card variant="outlined">
-			<CardContent>
+			<CardContent sx={{ p: '16px 16px !important' }}>
 				<Stack direction={'row'} justifyContent="space-between" alignItems="center">
 					<Stack direction="row" alignItems="center" spacing={1} width={'400px'}>
 						{icon}

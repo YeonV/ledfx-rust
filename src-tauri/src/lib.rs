@@ -8,7 +8,7 @@ pub mod types;
 pub mod utils;
 pub mod wled;
 
-use crate::effects::{blade_power, scan};
+use crate::effects::{blade_power, fire, scan};
 #[cfg(debug_assertions)]
 use specta_typescript::Typescript;
 use std::sync::mpsc;
@@ -60,7 +60,7 @@ fn configure_builder() -> Builder<tauri::Wry> {
             engine::delete_scene,
             engine::activate_scene,
             engine::get_scenes,
-            store::set_api_port
+            engine::set_api_port
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()
@@ -71,13 +71,13 @@ fn configure_builder() -> Builder<tauri::Wry> {
         .typ::<audio::AudioDevice>()
         .typ::<audio::DspSettings>()
         .typ::<engine::PresetCollection>()
+        .typ::<engine::ActiveEffectsState>()
         .typ::<utils::dsp::FilterbankType>()
         .typ::<utils::dsp::BladePlusParams>()
-        .typ::<store::EngineState>()
-        // --- START: NEW SCENE TYPES ---
         .typ::<store::Scene>()
+        .typ::<store::ScenePreset>()
         .typ::<store::SceneEffect>()
-        .typ::<engine::ActiveEffectsState>()
+        .typ::<store::EngineState>()
         .typ::<effects::schema::EffectSetting>()
         .typ::<effects::schema::Control>()
         .typ::<effects::BaseEffectConfig>()
@@ -85,6 +85,7 @@ fn configure_builder() -> Builder<tauri::Wry> {
         .typ::<engine::EffectConfig>()
         .typ::<blade_power::BladePowerConfig>()
         .typ::<scan::ScanConfig>()
+        .typ::<fire::FireConfig>()
         .typ::<audio::AudioDevicesInfo>()
 }
 
@@ -94,23 +95,27 @@ pub fn run() {
     let (engine_state_tx, engine_state_rx) = mpsc::channel::<engine::EngineRequest>();
     let (audio_command_tx, audio_command_rx) = mpsc::channel::<audio::AudioCommand>();
     let (api_command_tx, api_command_rx) = mpsc::channel::<api::ApiCommand>();
+
     let audio_data = audio::SharedAudioData::default();
     let dsp_settings = audio::SharedDspSettings::default();
 
-    let audio_data_clone_for_thread = audio_data.0.clone();
-    let dsp_settings_clone_for_thread = dsp_settings.0.clone();
-    // let audio_command_tx_for_engine = audio_command_tx.clone();
-
-    let initial_port = 3030; // Start with default, engine will update it
+    let initial_port = 3030;
     let api_manager_engine_command_tx = engine_command_tx.clone();
     let api_manager_engine_state_tx = engine_state_tx.clone();
     thread::spawn(move || {
-        api::api_server_manager(
-            api_command_rx,
-            api_manager_engine_command_tx, // Correct arg 2
-            api_manager_engine_state_tx,   // Correct arg 3
-            initial_port,
-        );
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            api::api_server_manager(
+                api_command_rx,
+                api_manager_engine_command_tx,
+                api_manager_engine_state_tx,
+                initial_port,
+            )
+            .await;
+        });
     });
 
     #[cfg(debug_assertions)]
@@ -129,17 +134,18 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .manage(engine::EngineCommandTx(engine_command_tx.clone()))
-        .manage(engine::EngineStateTx(engine_state_tx))
+        .manage(engine::EngineStateTx(engine_state_tx.clone()))
         .manage(audio_command_tx.clone())
         .manage(api_command_tx.clone())
-        .manage(audio_data)
-        .manage(dsp_settings)
+        .manage(audio_data.clone())
+        .manage(dsp_settings.clone())
         .invoke_handler(builder.invoke_handler());
 
     tauri_builder = tauri_builder.setup(move |app| {
         builder.mount_events(app);
         let state_handle = app.handle().clone();
         let engine_handle = app.handle().clone();
+
         let engine_api_command_tx = api_command_tx;
 
         thread::spawn(move || {
@@ -157,8 +163,8 @@ pub fn run() {
         thread::spawn(move || {
             audio::start_audio_capture(
                 audio_command_rx,
-                audio_data_clone_for_thread,
-                dsp_settings_clone_for_thread,
+                audio_data.0.clone(),
+                dsp_settings.0.clone(),
             );
         });
 
