@@ -54,7 +54,13 @@ fn configure_builder() -> Builder<tauri::Wry> {
             utils::dsp::calculate_center_frequencies,
             engine::save_preset,
             engine::delete_preset,
-            engine::load_presets
+            engine::load_presets,
+            // --- START: NEW SCENE COMMANDS ---
+            engine::save_scene,
+            engine::delete_scene,
+            engine::activate_scene,
+            engine::get_scenes
+            // --- END: NEW SCENE COMMANDS ---
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()
@@ -64,11 +70,14 @@ fn configure_builder() -> Builder<tauri::Wry> {
         .typ::<wled::MapInfo>()
         .typ::<audio::AudioDevice>()
         .typ::<audio::DspSettings>()
-        // .typ::<presets::AnyEffectConfig>()
         .typ::<engine::PresetCollection>()
         .typ::<utils::dsp::FilterbankType>()
         .typ::<utils::dsp::BladePlusParams>()
         .typ::<store::EngineState>()
+        // --- START: NEW SCENE TYPES ---
+        .typ::<store::Scene>()
+        .typ::<store::SceneEffect>()
+        .typ::<engine::ActiveEffectsState>()
         .typ::<effects::schema::EffectSetting>()
         .typ::<effects::schema::Control>()
         .typ::<effects::BaseEffectConfig>()

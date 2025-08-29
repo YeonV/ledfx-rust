@@ -247,6 +247,38 @@ async loadPresets(effectId: string) : Promise<Result<PresetCollection, string>> 
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async saveScene(scene: Scene) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_scene", { scene }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteScene(sceneId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_scene", { sceneId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async activateScene(sceneId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("activate_scene", { sceneId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getScenes() : Promise<Result<Scene[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_scenes") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -260,6 +292,7 @@ async loadPresets(effectId: string) : Promise<Result<PresetCollection, string>> 
 
 /** user-defined types **/
 
+export type ActiveEffectsState = { active_scene_id: string | null; selected_effects: Partial<{ [key in string]: string }>; effect_settings: Partial<{ [key in string]: Partial<{ [key in string]: EffectConfig }> }>; active_effects: Partial<{ [key in string]: boolean }> }
 export type AudioAnalysisData = { melbanks: number[] }
 export type AudioDevice = { name: string }
 export type AudioDevicesInfo = { devices: AudioDevice[]; default_device_name: string | null }
@@ -273,7 +306,7 @@ export type DspSettings = { fft_size: number; num_bands: number; min_freq: numbe
 export type EffectConfig = { type: "blade_power"; config: BladePowerConfig } | { type: "fire"; config: FireConfig } | { type: "scan"; config: ScanConfig }
 export type EffectInfo = { id: string; name: string }
 export type EffectSetting = { id: string; name: string; description: string; control: Control; defaultValue: DefaultValue }
-export type EngineState = { devices?: Partial<{ [key in string]: Device }>; virtuals?: Partial<{ [key in string]: Virtual }>; dsp_settings?: DspSettings; effect_presets?: Partial<{ [key in string]: Partial<{ [key in string]: EffectConfig }> }> }
+export type EngineState = { devices?: Partial<{ [key in string]: Device }>; virtuals?: Partial<{ [key in string]: Virtual }>; dsp_settings?: DspSettings; effect_presets?: Partial<{ [key in string]: Partial<{ [key in string]: EffectConfig }> }>; scenes?: Partial<{ [key in string]: Scene }> }
 export type FilterbankType = "Balanced" | "Precision" | "Vocal" | "Blade" | { BladePlus: BladePlusParams }
 export type FireConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { cooling: number; sparking: number; gradient: string }
 export type LedsInfo = { count: number }
@@ -282,6 +315,9 @@ export type MatrixCell = { device_id: string; pixel: number }
 export type PlaybackState = { is_paused: boolean }
 export type PresetCollection = { user: Partial<{ [key in string]: EffectConfig }>; built_in: Partial<{ [key in string]: EffectConfig }> }
 export type ScanConfig = ({ mirror: boolean; flip: boolean; blur: number; background_color: string }) & { speed: number; width: number; gradient: string }
+export type Scene = { id: string; name: string; virtual_effects: Partial<{ [key in string]: SceneEffect }> }
+export type SceneEffect = { type: "preset"; data: ScenePreset } | { type: "custom"; data: EffectConfig }
+export type ScenePreset = { effect_id: string; preset_name: string }
 export type Virtual = { id: string; name: string; matrix_data: ((MatrixCell | null)[])[]; is_device?: string | null }
 export type WledDevice = { ip_address: string; port: number; name: string; version: string; leds: LedsInfo; udp_port: number; architecture: string; maps: MapInfo[] }
 

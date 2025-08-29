@@ -56,20 +56,19 @@ pub fn config_to_value(config: EffectConfig) -> Value {
 
 use std::collections::HashMap;
 
-pub fn get_built_in_presets_for_effect(effect_id: &str) -> HashMap<String, Value> {
+pub fn get_effect_id_from_config(config: &EffectConfig) -> String {
+    match config {
+        EffectConfig::BladePower(_) => "blade_power".to_string(),
+        EffectConfig::Fire(_) => "fire".to_string(),
+        EffectConfig::Scan(_) => "scan".to_string(),
+    }
+}
+
+pub fn get_built_in_presets_for_effect(effect_id: &str) -> HashMap<String, EffectConfig> {
     match effect_id {
-        "blade_power" => effects::blade_power::get_built_in_presets()
-            .into_iter()
-            .map(|(k, v)| (k, serde_json::to_value(v).unwrap()))
-            .collect(),
-        "fire" => effects::fire::get_built_in_presets()
-            .into_iter()
-            .map(|(k, v)| (k, serde_json::to_value(v).unwrap()))
-            .collect(),
-        "scan" => effects::scan::get_built_in_presets()
-            .into_iter()
-            .map(|(k, v)| (k, serde_json::to_value(v).unwrap()))
-            .collect(),
+        "blade_power" => effects::blade_power::get_built_in_presets(),
+        "fire" => effects::fire::get_built_in_presets(),
+        "scan" => effects::scan::get_built_in_presets(),
         _ => HashMap::new(),
     }
 }

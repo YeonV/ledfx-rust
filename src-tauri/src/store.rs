@@ -1,4 +1,5 @@
 use crate::audio::DspSettings;
+use crate::engine::EffectConfig;
 use crate::presets::EffectPresetMap;
 use crate::types::{Device, Virtual};
 use serde::{Deserialize, Serialize};
@@ -7,6 +8,29 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 use specta::Type;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct ScenePreset { // <-- Create a simple struct for the preset data
+    pub effect_id: String,
+    pub preset_name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+#[serde(tag = "type", content = "data", rename_all = "camelCase")]
+pub enum SceneEffect {
+    // Both variants are now tuple-like, containing a struct
+    Preset(ScenePreset), 
+    Custom(EffectConfig),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type, Default)]
+pub struct Scene {
+    pub id: String,
+    pub name: String,
+    // A map of Virtual ID to the effect that should be active on it
+    pub virtual_effects: HashMap<String, SceneEffect>,
+}
+// --- END: NEW SCENE STRUCTS ---
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Type)]
 pub struct EngineState {
@@ -19,6 +43,11 @@ pub struct EngineState {
     
     #[serde(default)]
     pub effect_presets: EffectPresetMap,
+
+    // --- START: NEW SCENES FIELD ---
+    #[serde(default)]
+    pub scenes: HashMap<String, Scene>, // A map of Scene ID to Scene
+    // --- END: NEW SCENES FIELD ---
 }
 
 fn get_settings_path(app_handle: &AppHandle) -> PathBuf {

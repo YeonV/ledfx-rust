@@ -4,12 +4,12 @@ use crate::effects::{
     schema::{Control, DefaultValue, EffectSetting},
     BaseEffectConfig, Effect,
 };
+use crate::engine::EffectConfig;
 use crate::utils::colors;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
 use std::collections::HashMap;
-use crate::engine::EffectConfig;
 
 pub const NAME: &str = "Blade Power";
 
@@ -144,13 +144,11 @@ impl Effect for BladePower {
     }
 }
 
-// --- START: BUILT-IN PRESETS IMPLEMENTATION ---
 pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
     let mut presets = HashMap::new();
 
     presets.insert(
         "Ocean Breeze".to_string(),
-        // Wrap the concrete struct in the correct enum variant
         EffectConfig::BladePower(BladePowerConfig {
             decay: 0.8,
             multiplier: 0.6,
@@ -184,4 +182,3 @@ pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
 
     presets
 }
-// --- END: BUILT-IN PRESETS IMPLEMENTATION ---

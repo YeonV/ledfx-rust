@@ -1,6 +1,6 @@
 use crate::audio::{DspSettings, SharedAudioData};
 use crate::effects::Effect;
-use crate::store;
+use crate::store::{self, Scene, SceneEffect};
 use crate::types::{Device, MatrixCell, Virtual};
 use crate::utils::{colors, ddp, dsp};
 use serde::Serialize;
@@ -40,6 +40,14 @@ pub struct PresetCollection {
     pub built_in: HashMap<String, EffectConfig>,
 }
 
+#[derive(Serialize, Type, Clone)]
+pub struct ActiveEffectsState {
+    pub active_scene_id: Option<String>,
+    pub selected_effects: HashMap<String, String>,
+    pub effect_settings: HashMap<String, HashMap<String, EffectConfig>>,
+    pub active_effects: HashMap<String, bool>,
+}
+
 pub struct EngineStateTx(pub Sender<EngineRequest>);
 pub enum EngineRequest {
     GetVirtuals(Sender<Vec<Virtual>>),
@@ -47,6 +55,7 @@ pub enum EngineRequest {
     GetDspSettings(Sender<DspSettings>),
     GetPlaybackState(Sender<PlaybackState>),
     GetPresets(String, Sender<PresetCollection>),
+    GetScenes(Sender<Vec<Scene>>),
 }
 
 pub enum EngineCommand {
@@ -65,6 +74,9 @@ pub enum EngineCommand {
     ReloadState,
     SavePreset { effect_id: String, preset_name: String, settings: EffectConfig },
     DeletePreset { effect_id: String, preset_name: String },
+    SaveScene(Scene),
+    DeleteScene(String),
+    ActivateScene(String),
 }
 
 pub struct EngineCommandTx(pub mpsc::Sender<EngineCommand>);
@@ -81,6 +93,13 @@ fn emit_devices_update(devices: &HashMap<String, Device>, app_handle: &AppHandle
 fn emit_playback_state_update(is_paused: bool, app_handle: &AppHandle) {
     app_handle.emit("playback-state-changed", &PlaybackState { is_paused }).unwrap();
 }
+fn emit_scenes_update(scenes: &HashMap<String, Scene>, app_handle: &AppHandle) {
+    let scene_list: Vec<Scene> = scenes.values().cloned().collect();
+    app_handle.emit("scenes-changed", &scene_list).unwrap();
+}
+fn emit_active_effects_update(state: &ActiveEffectsState, app_handle: &AppHandle) {
+    app_handle.emit("scene-activated", state).unwrap();
+}
 
 pub fn run_effect_engine(
     command_rx: mpsc::Receiver<EngineCommand>,
@@ -90,24 +109,16 @@ pub fn run_effect_engine(
     app_handle: AppHandle,
 ) {
     let mut engine_state = store::load_engine_state(&app_handle);
-    
-    let mut virtuals: HashMap<String, ActiveVirtual> = engine_state
-        .virtuals
-        .into_iter()
-        .map(|(id, config)| {
-            let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-            (id, ActiveVirtual {
-                effect: None,
-                config,
-                pixel_count,
-                r_channel: vec![0.0; pixel_count],
-                g_channel: vec![0.0; pixel_count],
-                b_channel: vec![0.0; pixel_count],
-            })
+    let mut virtuals: HashMap<String, ActiveVirtual> = engine_state.virtuals.into_iter().map(|(id, config)| {
+        let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
+        (id, ActiveVirtual {
+            effect: None, config, pixel_count,
+            r_channel: vec![0.0; pixel_count],
+            g_channel: vec![0.0; pixel_count],
+            b_channel: vec![0.0; pixel_count],
         })
-        .collect();
+    }).collect();
     let mut devices = engine_state.devices;
-
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
     socket.set_nonblocking(true).expect("Failed to set non-blocking socket");
     let mut frame_count: u8 = 0;
@@ -134,21 +145,12 @@ pub fn run_effect_engine(
                 }
                 EngineRequest::GetPresets(effect_id, responder) => {
                     let user_presets = engine_state.effect_presets.get(&effect_id).cloned().unwrap_or_default();
-                    
-                    let built_in_presets_value = get_built_in_presets_for_effect(&effect_id);
-                    
-                    let built_in_presets: HashMap<String, EffectConfig> = built_in_presets_value
-                        .into_iter()
-                        .filter_map(|(k, v)| {
-                            // This will now SUCCEED because the `Value` contains the `type` field
-                            serde_json::from_value::<EffectConfig>(v).ok().map(|config| (k, config))
-                        })
-                        .collect();
-
-                    responder.send(PresetCollection {
-                        user: user_presets,
-                        built_in: built_in_presets,
-                    }).unwrap();
+                    let built_in_presets = get_built_in_presets_for_effect(&effect_id);
+                    responder.send(PresetCollection { user: user_presets, built_in: built_in_presets }).unwrap();
+                }
+                EngineRequest::GetScenes(responder) => {
+                    let scene_list = engine_state.scenes.values().cloned().collect();
+                    responder.send(scene_list).unwrap();
                 }
             }
         }
@@ -180,7 +182,6 @@ pub fn run_effect_engine(
                             })
                         }).collect();
                     devices = engine_state.devices;
-                    
                     emit_devices_update(&devices, &app_handle);
                     emit_virtuals_update(&virtuals, &app_handle);
                     app_handle.emit("dsp-settings-changed", &engine_state.dsp_settings).unwrap();
@@ -228,9 +229,7 @@ pub fn run_effect_engine(
                     virtuals.insert(
                         config.id.clone(),
                         ActiveVirtual {
-                            effect: None,
-                            config,
-                            pixel_count,
+                            effect: None, config, pixel_count,
                             r_channel: vec![0.0; pixel_count],
                             g_channel: vec![0.0; pixel_count],
                             b_channel: vec![0.0; pixel_count],
@@ -291,13 +290,8 @@ pub fn run_effect_engine(
                         target_frame_duration = Duration::from_millis(1000 / fps as u64);
                     }
                 }
-                 EngineCommand::SavePreset { effect_id, preset_name, settings } => {
-                    engine_state
-                        .effect_presets
-                        .entry(effect_id)
-                        .or_default()
-                        // --- FIX: Insert the correct type ---
-                        .insert(preset_name, settings);
+                EngineCommand::SavePreset { effect_id, preset_name, settings } => {
+                    engine_state.effect_presets.entry(effect_id).or_default().insert(preset_name, settings);
                     should_save_state = true;
                 }
                 EngineCommand::DeletePreset { effect_id, preset_name } => {
@@ -305,6 +299,71 @@ pub fn run_effect_engine(
                         if effect_map.remove(&preset_name).is_some() {
                             should_save_state = true;
                         }
+                    }
+                }
+                EngineCommand::SaveScene(scene) => {
+                    println!("[ENGINE] Saving scene '{}' ({})", scene.name, scene.id);
+                    engine_state.scenes.insert(scene.id.clone(), scene);
+                    emit_scenes_update(&engine_state.scenes, &app_handle);
+                    should_save_state = true;
+                }
+                EngineCommand::DeleteScene(scene_id) => {
+                    println!("[ENGINE] Deleting scene '{}'", scene_id);
+                    if engine_state.scenes.remove(&scene_id).is_some() {
+                        emit_scenes_update(&engine_state.scenes, &app_handle);
+                        should_save_state = true;
+                    }
+                }
+                EngineCommand::ActivateScene(scene_id) => {
+                    println!("[ENGINE] Activating scene '{}'", scene_id);
+                    if let Some(scene) = engine_state.scenes.get(&scene_id) {
+                        let mut new_selected_effects: HashMap<String, String> = HashMap::new();
+                        let mut new_effect_settings: HashMap<String, HashMap<String, EffectConfig>> = HashMap::new();
+                        let mut new_active_effects: HashMap<String, bool> = HashMap::new();
+
+                        for active_virtual in virtuals.values_mut() {
+                            active_virtual.effect = None;
+                        }
+
+                        for (virtual_id, scene_effect) in &scene.virtual_effects {
+                            if let Some(active_virtual) = virtuals.get_mut(virtual_id) {
+                                let effect_config = match scene_effect {
+                                    SceneEffect::Custom(config) => Some(config.clone()),
+                                    SceneEffect::Preset(scene_preset) => {
+                                        engine_state.effect_presets
+                                            .get(&scene_preset.effect_id)
+                                            .and_then(|presets| presets.get(&scene_preset.preset_name))
+                                            .cloned()
+                                        .or_else(|| {
+                                            let built_in = get_built_in_presets_for_effect(&scene_preset.effect_id);
+                                            built_in
+                                                .get(&scene_preset.preset_name)
+                                                .cloned()
+                                        })
+                                    }
+                                };
+                                
+                                if let Some(config) = effect_config {
+                                    let effect_id = get_effect_id_from_config(&config);
+                                    new_selected_effects.insert(virtual_id.clone(), effect_id.clone());
+                                    new_effect_settings.entry(virtual_id.clone()).or_default().insert(effect_id.clone(), config.clone());
+                                    new_active_effects.insert(virtual_id.clone(), true);
+
+                                    active_virtual.effect = Some(create_effect(config));
+                                } else {
+                                    println!("[ENGINE] Could not find preset/config for scene activation: virtual '{}' in scene '{}'", virtual_id, scene_id);
+                                }
+                            }
+                        }
+
+                        emit_active_effects_update(&ActiveEffectsState {
+                            active_scene_id: Some(scene_id.clone()),
+                            selected_effects: new_selected_effects,
+                            effect_settings: new_effect_settings,
+                            active_effects: new_active_effects,
+                        }, &app_handle);
+                    } else {
+                        println!("[ENGINE] Could not find scene to activate: {}", scene_id);
                     }
                 }
             }
@@ -318,44 +377,36 @@ pub fn run_effect_engine(
         if !is_paused {
             let latest_audio_data = audio_data.inner().0.lock().unwrap().clone();
             frame_count = frame_count.wrapping_add(1);
-
             let mut device_buffers: HashMap<String, Vec<u8>> = HashMap::new();
             let mut preview_frames: HashMap<String, Vec<u8>> = HashMap::new();
-
             for (virtual_id, active_virtual) in &mut virtuals {
                 if let Some(effect) = &mut active_virtual.effect {
                     let mut virtual_frame = vec![0u8; active_virtual.pixel_count * 3];
                     effect.render(&latest_audio_data, &mut virtual_frame);
                     let base_config = effect.get_base_config();
                     let pixel_count = active_virtual.pixel_count;
-
                     for i in 0..pixel_count {
                         active_virtual.r_channel[i] = virtual_frame[i * 3] as f32;
                         active_virtual.g_channel[i] = virtual_frame[i * 3 + 1] as f32;
                         active_virtual.b_channel[i] = virtual_frame[i * 3 + 2] as f32;
                     }
-
                     if base_config.blur > 0.0 {
                         dsp::gaussian_blur_1d(&mut active_virtual.r_channel, base_config.blur);
                         dsp::gaussian_blur_1d(&mut active_virtual.g_channel, base_config.blur);
                         dsp::gaussian_blur_1d(&mut active_virtual.b_channel, base_config.blur);
                     }
-
                     if base_config.mirror {
                         let half_len = pixel_count / 2;
                         let r_clone = active_virtual.r_channel.clone();
                         let g_clone = active_virtual.g_channel.clone();
                         let b_clone = active_virtual.b_channel.clone();
-
                         if base_config.flip {
                             let first_half_r = &r_clone[0..half_len];
                             let first_half_g = &g_clone[0..half_len];
                             let first_half_b = &b_clone[0..half_len];
-
                             active_virtual.r_channel[0..half_len].copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
                             active_virtual.g_channel[0..half_len].copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
                             active_virtual.b_channel[0..half_len].copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
-
                             active_virtual.r_channel[pixel_count - half_len..].copy_from_slice(first_half_r);
                             active_virtual.g_channel[pixel_count - half_len..].copy_from_slice(first_half_g);
                             active_virtual.b_channel[pixel_count - half_len..].copy_from_slice(first_half_b);
@@ -372,14 +423,12 @@ pub fn run_effect_engine(
                         active_virtual.g_channel.reverse();
                         active_virtual.b_channel.reverse();
                     }
-
                     let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0, 0, 0]);
                     for i in 0..pixel_count {
                         virtual_frame[i * 3] = (active_virtual.r_channel[i] as u8).saturating_add(bg_color[0]);
                         virtual_frame[i * 3 + 1] = (active_virtual.g_channel[i] as u8).saturating_add(bg_color[1]);
                         virtual_frame[i * 3 + 2] = (active_virtual.b_channel[i] as u8).saturating_add(bg_color[2]);
                     }
-
                     let mut linear_index = 0;
                     for row in &active_virtual.config.matrix_data {
                         for cell in row {
@@ -399,31 +448,26 @@ pub fn run_effect_engine(
                     preview_frames.insert(virtual_id.clone(), virtual_frame);
                 }
             }
-
             for (ip, buffer) in &device_buffers {
                 let destination = format!("{}:4048", ip);
                 let _ = ddp::send_ddp_packet(&socket, &destination, 0, buffer, frame_count);
             }
-
             let preview_payload: HashMap<String, Vec<u8>> = preview_frames.into_iter().collect();
             if !preview_payload.is_empty() {
                 app_handle.emit("engine-tick", &preview_payload).unwrap();
             }
         }
-
         let frame_duration = frame_start.elapsed();
         if let Some(sleep_duration) = target_frame_duration.checked_sub(frame_duration) {
             thread::sleep(sleep_duration);
         }
     }
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn restart_audio_capture(command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::RestartAudioCapture).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn get_playback_state(state_tx: State<EngineStateTx>) -> Result<PlaybackState, String> {
@@ -431,13 +475,11 @@ pub fn get_playback_state(state_tx: State<EngineStateTx>) -> Result<PlaybackStat
     state_tx.0.send(EngineRequest::GetPlaybackState(responder_tx)).map_err(|e| e.to_string())?;
     responder_rx.recv().map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn toggle_pause(command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::TogglePause).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn start_effect(
@@ -447,13 +489,11 @@ pub fn start_effect(
 ) -> Result<(), String> {
     command_tx.0.send(EngineCommand::StartEffect { virtual_id, config }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn stop_effect(virtual_id: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::StopEffect { virtual_id }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn update_effect_settings(
@@ -461,21 +501,18 @@ pub fn update_effect_settings(
     settings: EffectConfig,
     command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
-    command_tx.0.send(EngineCommand::UpdateSettings { virtual_id, settings, }).map_err(|e| e.to_string())
+    command_tx.0.send(EngineCommand::UpdateSettings { virtual_id, settings }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn add_virtual(config: Virtual, command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::AddVirtual { config }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn update_virtual(config: Virtual, command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::UpdateVirtual { config }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn remove_virtual(
@@ -484,19 +521,16 @@ pub fn remove_virtual(
 ) -> Result<(), String> {
     command_tx.0.send(EngineCommand::RemoveVirtual { virtual_id }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn add_device(config: Device, command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::AddDevice { config }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn remove_device(device_ip: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::RemoveDevice { device_ip }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn get_virtuals(state_tx: State<EngineStateTx>) -> Result<Vec<Virtual>, String> {
@@ -504,7 +538,6 @@ pub fn get_virtuals(state_tx: State<EngineStateTx>) -> Result<Vec<Virtual>, Stri
     state_tx.0.send(EngineRequest::GetVirtuals(responder_tx)).map_err(|e| e.to_string())?;
     responder_rx.recv().map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn get_devices(state_tx: State<EngineStateTx>) -> Result<Vec<Device>, String> {
@@ -512,19 +545,16 @@ pub fn get_devices(state_tx: State<EngineStateTx>) -> Result<Vec<Device>, String
     state_tx.0.send(EngineRequest::GetDevices(responder_tx)).map_err(|e| e.to_string())?;
     responder_rx.recv().map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn set_target_fps(fps: u32, command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::SetTargetFps { fps }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn trigger_reload(command_tx: State<EngineCommandTx>) -> Result<(), String> {
     command_tx.0.send(EngineCommand::ReloadState).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn update_dsp_settings(
@@ -533,18 +563,16 @@ pub fn update_dsp_settings(
 ) -> Result<(), String> {
     command_tx.0.send(EngineCommand::UpdateDspSettings { settings }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn save_preset(
     effect_id: String,
     preset_name: String,
-    settings:EffectConfig,
+    settings: EffectConfig,
     command_tx: State<EngineCommandTx>,
 ) -> Result<(), String> {
     command_tx.0.send(EngineCommand::SavePreset { effect_id, preset_name, settings }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn delete_preset(
@@ -554,7 +582,6 @@ pub fn delete_preset(
 ) -> Result<(), String> {
     command_tx.0.send(EngineCommand::DeletePreset { effect_id, preset_name }).map_err(|e| e.to_string())
 }
-
 #[tauri::command]
 #[specta::specta]
 pub fn load_presets(
@@ -563,5 +590,27 @@ pub fn load_presets(
 ) -> Result<PresetCollection, String> {
     let (responder_tx, responder_rx) = mpsc::channel();
     engine_state_tx.0.send(EngineRequest::GetPresets(effect_id, responder_tx)).map_err(|e| e.to_string())?;
+    responder_rx.recv().map_err(|e| e.to_string())
+}
+#[tauri::command]
+#[specta::specta]
+pub fn save_scene(scene: Scene, command_tx: State<EngineCommandTx>) -> Result<(), String> {
+    command_tx.0.send(EngineCommand::SaveScene(scene)).map_err(|e| e.to_string())
+}
+#[tauri::command]
+#[specta::specta]
+pub fn delete_scene(scene_id: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
+    command_tx.0.send(EngineCommand::DeleteScene(scene_id)).map_err(|e| e.to_string())
+}
+#[tauri::command]
+#[specta::specta]
+pub fn activate_scene(scene_id: String, command_tx: State<EngineCommandTx>) -> Result<(), String> {
+    command_tx.0.send(EngineCommand::ActivateScene(scene_id)).map_err(|e| e.to_string())
+}
+#[tauri::command]
+#[specta::specta]
+pub fn get_scenes(engine_state_tx: State<EngineStateTx>) -> Result<Vec<Scene>, String> {
+    let (responder_tx, responder_rx) = mpsc::channel();
+    engine_state_tx.0.send(EngineRequest::GetScenes(responder_tx)).map_err(|e| e.to_string())?;
     responder_rx.recv().map_err(|e| e.to_string())
 }

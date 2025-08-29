@@ -79,7 +79,7 @@ export function EffectSettings({ schema, settings, onSettingChange, effectId, on
                 );
             case 'checkbox':
                 return (
-                <Button key={setting.id} sx={{ flexBasis: '48%', mt: 1 }} variant={!!value ? 'contained' : 'outlined'} onClick={() => onSettingChange(setting.id, !value)}>
+                <Button key={setting.id} sx={{ flexBasis: '49%', mt: 1 }} variant={!!value ? 'contained' : 'outlined'} onClick={() => onSettingChange(setting.id, !value)}>
                     <Typography variant='caption'>{setting.name}</Typography>
                 </Button>
                 );

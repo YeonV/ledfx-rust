@@ -1,13 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings, PresetCollection } from '../bindings';
+import type { Virtual, AudioDevice, EffectSetting, EffectInfo, Device, PlaybackState, DspSettings, PresetCollection, Scene } from '../bindings';
 
 type EffectSettingsByVirtual = Record<string, Record<string, Record<string, any>>>;
 
-// --- START: NEW PRESET STATE TYPE ---
-// A cache for presets, keyed by effect ID
 type PresetCache = Record<string, PresetCollection>;
-// --- END: NEW PRESET STATE TYPE ---
 
 type IStore = {
   devices: Device[];
@@ -46,11 +43,12 @@ type IStore = {
   setDspSettings: (settings: DspSettings) => void;
   dirtyDspSettings: DspSettings | null;
   setDirtyDspSettings: (settings: DspSettings) => void;
-  
-  // --- START: NEW PRESET STATE ---
   presetCache: PresetCache;
   setPresetsForEffect: (effectId: string, presets: PresetCollection) => void;
-  // --- END: NEW PRESET STATE ---
+  scenes: Scene[];
+  setScenes: (scenes: Scene[]) => void;
+  activeSceneId: string | null;
+  setActiveSceneId: (id: string | null) => void;
 }
 
 export const useStore = create<IStore>()(
@@ -92,25 +90,23 @@ export const useStore = create<IStore>()(
       setDspSettings: (settings) => set({ dspSettings: settings, dirtyDspSettings: settings }),
       dirtyDspSettings: null,
       setDirtyDspSettings: (settings) => set({ dirtyDspSettings: settings }),
-
-      // --- START: NEW PRESET STATE ---
       presetCache: {},
       setPresetsForEffect: (effectId, presets) => set((state) => ({
         presetCache: { ...state.presetCache, [effectId]: presets }
       })),
-      // --- END: NEW PRESET STATE ---
+      scenes: [],
+      setScenes: (scenes) => set({ scenes }),
+      activeSceneId: null,
+      setActiveSceneId: (id) => set({ activeSceneId: id }),
     }),
     {
       name: 'ledfx-store',
-      // We are NOT persisting presets. They are fetched from the backend as needed.
-      // We DO persist the effect settings that a user has dialed in.
       partialize: (state) =>
         Object.fromEntries(
           Object.entries(state).filter(([key]) => [
             'selectedAudioDevice',
             'dirtyDspSettings',
-            // 'selectedEffects',
-            // 'effectSettings',
+            // Scenes are not persisted in the frontend store; they are fetched from the backend.
           ].includes(key))
         ),
     },
