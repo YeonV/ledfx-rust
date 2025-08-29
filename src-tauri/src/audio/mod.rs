@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::State;
+mod shared_processing;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DspSettings {
@@ -130,7 +131,7 @@ pub fn start_audio_capture(
     #[cfg(not(target_os = "android"))]
     desktop::run_desktop_capture(command_rx, audio_data, dsp_settings);
     #[cfg(target_os = "android")]
-    android::run_android_capture(command_rx, audio_data);
+    android::run_android_capture(command_rx, audio_data, dsp_settings);
 }
 
 #[tauri::command]
@@ -161,7 +162,7 @@ pub fn set_audio_device(
     #[cfg(not(target_os = "android"))]
     return crate::audio::desktop::set_desktop_device_impl(device_name, command_tx);
     #[cfg(target_os = "android")]
-    return crate::audio::android::set_android_device_impl(device_name, command_tx);
+    return crate::audio::android::set_android_device(device_name, command_tx);
 }
 
 #[tauri::command]

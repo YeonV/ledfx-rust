@@ -46,12 +46,18 @@ pub fn render_frame(
                     let first_half_r = &r_clone[0..half_len];
                     let first_half_g = &g_clone[0..half_len];
                     let first_half_b = &b_clone[0..half_len];
-                    active_virtual.r_channel[0..half_len].copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
-                    active_virtual.g_channel[0..half_len].copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
-                    active_virtual.b_channel[0..half_len].copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
-                    active_virtual.r_channel[pixel_count - half_len..].copy_from_slice(first_half_r);
-                    active_virtual.g_channel[pixel_count - half_len..].copy_from_slice(first_half_g);
-                    active_virtual.b_channel[pixel_count - half_len..].copy_from_slice(first_half_b);
+                    active_virtual.r_channel[0..half_len]
+                        .copy_from_slice(&first_half_r.iter().rev().cloned().collect::<Vec<f32>>());
+                    active_virtual.g_channel[0..half_len]
+                        .copy_from_slice(&first_half_g.iter().rev().cloned().collect::<Vec<f32>>());
+                    active_virtual.b_channel[0..half_len]
+                        .copy_from_slice(&first_half_b.iter().rev().cloned().collect::<Vec<f32>>());
+                    active_virtual.r_channel[pixel_count - half_len..]
+                        .copy_from_slice(first_half_r);
+                    active_virtual.g_channel[pixel_count - half_len..]
+                        .copy_from_slice(first_half_g);
+                    active_virtual.b_channel[pixel_count - half_len..]
+                        .copy_from_slice(first_half_b);
                 } else {
                     for i in 0..half_len {
                         let mirror_i = pixel_count - 1 - i;
@@ -66,11 +72,15 @@ pub fn render_frame(
                 active_virtual.b_channel.reverse();
             }
 
-            let bg_color = colors::parse_single_color(&base_config.background_color).unwrap_or([0, 0, 0]);
+            let bg_color =
+                colors::parse_single_color(&base_config.background_color).unwrap_or([0, 0, 0]);
             for i in 0..pixel_count {
-                virtual_frame[i * 3] = (active_virtual.r_channel[i] as u8).saturating_add(bg_color[0]);
-                virtual_frame[i * 3 + 1] = (active_virtual.g_channel[i] as u8).saturating_add(bg_color[1]);
-                virtual_frame[i * 3 + 2] = (active_virtual.b_channel[i] as u8).saturating_add(bg_color[2]);
+                virtual_frame[i * 3] =
+                    (active_virtual.r_channel[i] as u8).saturating_add(bg_color[0]);
+                virtual_frame[i * 3 + 1] =
+                    (active_virtual.g_channel[i] as u8).saturating_add(bg_color[1]);
+                virtual_frame[i * 3 + 2] =
+                    (active_virtual.b_channel[i] as u8).saturating_add(bg_color[2]);
             }
 
             let mut linear_index = 0;
@@ -78,11 +88,16 @@ pub fn render_frame(
                 for cell in row {
                     if let Some(cell_data) = cell {
                         if let Some(device) = devices.get(&cell_data.device_id) {
-                            let device_buffer = device_buffers.entry(cell_data.device_id.clone()).or_insert_with(|| vec![0; device.led_count as usize * 3]);
+                            let device_buffer = device_buffers
+                                .entry(cell_data.device_id.clone())
+                                .or_insert_with(|| vec![0; device.led_count as usize * 3]);
                             let source_idx = linear_index * 3;
                             let dest_idx = cell_data.pixel as usize * 3;
-                            if dest_idx + 2 < device_buffer.len() && source_idx + 2 < virtual_frame.len() {
-                                device_buffer[dest_idx..dest_idx + 3].copy_from_slice(&virtual_frame[source_idx..source_idx + 3]);
+                            if dest_idx + 2 < device_buffer.len()
+                                && source_idx + 2 < virtual_frame.len()
+                            {
+                                device_buffer[dest_idx..dest_idx + 3]
+                                    .copy_from_slice(&virtual_frame[source_idx..source_idx + 3]);
                             }
                         }
                         linear_index += 1;

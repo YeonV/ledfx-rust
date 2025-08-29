@@ -2,7 +2,7 @@ name: Builder
 
 on:
   push:
-    branches: ["main"]
+    branches: ['main']
   workflow_dispatch:
 
 jobs:
@@ -106,7 +106,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             xdg-utils \
-            libasound2-dev 
+            libasound2-dev
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
@@ -204,7 +204,7 @@ jobs:
           sed -i "/<\/manifest>/i \    ${PERMISSIONS}" $MANIFEST_PATH
           echo "--- Patched AndroidManifest.xml ---"
           cat $MANIFEST_PATH
-          
+
           # 2. Copy our custom Kotlin files
           KOTLIN_DEST_PATH="src-tauri/gen/android/app/src/main/java/com/blade/ledfx_rust"
           cp android-native/AudioVisualizer.kt $KOTLIN_DEST_PATH/

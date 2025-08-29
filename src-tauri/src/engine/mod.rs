@@ -26,31 +26,72 @@ pub fn run_effect_engine(
 ) {
     let mut engine_state = store::load_engine_state(&app_handle);
 
-    let mut virtuals: HashMap<String, ActiveVirtual> = engine_state.virtuals.clone().into_iter().map(|(id, config)| {
-        let pixel_count = config.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-        (id, ActiveVirtual {
-            effect: None, config, pixel_count,
-            r_channel: vec![0.0; pixel_count],
-            g_channel: vec![0.0; pixel_count],
-            b_channel: vec![0.0; pixel_count],
+    let mut virtuals: HashMap<String, ActiveVirtual> = engine_state
+        .virtuals
+        .clone()
+        .into_iter()
+        .map(|(id, config)| {
+            let pixel_count = config
+                .matrix_data
+                .iter()
+                .flat_map(|row| row.iter())
+                .filter(|cell| cell.is_some())
+                .count();
+            (
+                id,
+                ActiveVirtual {
+                    effect: None,
+                    config,
+                    pixel_count,
+                    r_channel: vec![0.0; pixel_count],
+                    g_channel: vec![0.0; pixel_count],
+                    b_channel: vec![0.0; pixel_count],
+                },
+            )
         })
-    }).collect();
+        .collect();
     let mut devices = engine_state.devices.clone();
-    
+
     // Auto-create device virtuals on startup
     for (device_ip, device_config) in &devices {
         let virtual_id = format!("device_{}", device_ip);
         if !virtuals.contains_key(&virtual_id) {
-            let matrix_data = vec![(0..device_config.led_count).map(|i| Some(crate::types::MatrixCell { device_id: device_ip.clone(), pixel: i })).collect()];
-            let device_virtual = crate::types::Virtual { id: virtual_id.clone(), name: device_config.name.clone(), matrix_data, is_device: Some(device_ip.clone()) };
-            let pixel_count = device_virtual.matrix_data.iter().flat_map(|row| row.iter()).filter(|cell| cell.is_some()).count();
-            let active_virtual = ActiveVirtual { effect: None, config: device_virtual, pixel_count, r_channel: vec![0.0; pixel_count], g_channel: vec![0.0; pixel_count], b_channel: vec![0.0; pixel_count] };
+            let matrix_data = vec![(0..device_config.led_count)
+                .map(|i| {
+                    Some(crate::types::MatrixCell {
+                        device_id: device_ip.clone(),
+                        pixel: i,
+                    })
+                })
+                .collect()];
+            let device_virtual = crate::types::Virtual {
+                id: virtual_id.clone(),
+                name: device_config.name.clone(),
+                matrix_data,
+                is_device: Some(device_ip.clone()),
+            };
+            let pixel_count = device_virtual
+                .matrix_data
+                .iter()
+                .flat_map(|row| row.iter())
+                .filter(|cell| cell.is_some())
+                .count();
+            let active_virtual = ActiveVirtual {
+                effect: None,
+                config: device_virtual,
+                pixel_count,
+                r_channel: vec![0.0; pixel_count],
+                g_channel: vec![0.0; pixel_count],
+                b_channel: vec![0.0; pixel_count],
+            };
             virtuals.insert(virtual_id, active_virtual);
         }
     }
 
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-    socket.set_nonblocking(true).expect("Failed to set non-blocking socket");
+    socket
+        .set_nonblocking(true)
+        .expect("Failed to set non-blocking socket");
     let mut frame_count: u8 = 0;
     let mut target_frame_duration = Duration::from_millis(1000 / 60);
     let mut is_paused = false;
@@ -60,11 +101,13 @@ pub fn run_effect_engine(
         if let Ok(request) = request_rx.try_recv() {
             match request {
                 EngineRequest::GetVirtuals(responder) => {
-                    let virtual_configs: Vec<crate::types::Virtual> = virtuals.values().map(|v| v.config.clone()).collect();
+                    let virtual_configs: Vec<crate::types::Virtual> =
+                        virtuals.values().map(|v| v.config.clone()).collect();
                     responder.send(virtual_configs).unwrap();
                 }
                 EngineRequest::GetDevices(responder) => {
-                    let device_list: Vec<crate::types::Device> = devices.values().cloned().collect();
+                    let device_list: Vec<crate::types::Device> =
+                        devices.values().cloned().collect();
                     responder.send(device_list).unwrap();
                 }
                 EngineRequest::GetPlaybackState(responder) => {
@@ -74,9 +117,18 @@ pub fn run_effect_engine(
                     responder.send(engine_state.dsp_settings.clone()).unwrap();
                 }
                 EngineRequest::GetPresets(effect_id, responder) => {
-                    let user_presets = engine_state.effect_presets.get(&effect_id).cloned().unwrap_or_default();
+                    let user_presets = engine_state
+                        .effect_presets
+                        .get(&effect_id)
+                        .cloned()
+                        .unwrap_or_default();
                     let built_in_presets = get_built_in_presets_for_effect(&effect_id);
-                    responder.send(PresetCollection { user: user_presets, built_in: built_in_presets }).unwrap();
+                    responder
+                        .send(PresetCollection {
+                            user: user_presets,
+                            built_in: built_in_presets,
+                        })
+                        .unwrap();
                 }
                 EngineRequest::GetScenes(responder) => {
                     let scene_list = engine_state.scenes.values().cloned().collect();
@@ -88,7 +140,7 @@ pub fn run_effect_engine(
         let mut should_save_state = false;
         while let Ok(command) = command_rx.try_recv() {
             if let EngineCommand::SetTargetFps { fps } = command {
-                 if fps > 0 {
+                if fps > 0 {
                     target_frame_duration = Duration::from_millis(1000 / fps as u64);
                 }
             } else {

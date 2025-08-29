@@ -1,0 +1,7 @@
+{
+	"$schema": "../gen/schemas/mobile-schema.json",
+	"identifier": "android-main",
+	"description": "Main capability for the Android application",
+	"windows": ["main"],
+	"permissions": ["core:default", "store:default", "fs:default", "opener:default", "os:default"]
+}

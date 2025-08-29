@@ -31,14 +31,22 @@ pub fn get_schema() -> Vec<EffectSetting> {
             id: "decay".to_string(),
             name: "Decay".to_string(),
             description: "Rate of color decay".to_string(),
-            control: Control::Slider { min: 0.0, max: 1.0, step: 0.01 },
+            control: Control::Slider {
+                min: 0.0,
+                max: 1.0,
+                step: 0.01,
+            },
             default_value: DefaultValue::Number(0.7),
         },
         EffectSetting {
             id: "multiplier".to_string(),
             name: "Multiplier".to_string(),
             description: "Make the reactive bar bigger/smaller".to_string(),
-            control: Control::Slider { min: 0.0, max: 1.0, step: 0.01 },
+            control: Control::Slider {
+                min: 0.0,
+                max: 1.0,
+                step: 0.01,
+            },
             default_value: DefaultValue::Number(0.5),
         },
         EffectSetting {
@@ -83,7 +91,9 @@ impl BladePower {
     }
 
     fn rebuild_palette(&mut self, pixel_count: usize) {
-        if pixel_count == 0 { return; }
+        if pixel_count == 0 {
+            return;
+        }
         if self.v_channel.len() != pixel_count {
             self.v_channel = vec![0.0; pixel_count];
         }
@@ -94,7 +104,9 @@ impl BladePower {
 impl Effect for BladePower {
     fn render(&mut self, audio_data: &AudioAnalysisData, frame: &mut [u8]) {
         let pixel_count = frame.len() / 3;
-        if pixel_count == 0 { return; }
+        if pixel_count == 0 {
+            return;
+        }
 
         if self.gradient_palette.len() != pixel_count {
             self.rebuild_palette(pixel_count);
@@ -154,7 +166,12 @@ pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
             multiplier: 0.6,
             frequency_range: "Lows (beat+bass)".to_string(),
             gradient: "linear-gradient(90deg, #00c6ff 0%, #0072ff 100%)".to_string(),
-            base: BaseEffectConfig { mirror: false, flip: false, blur: 1.0, background_color: "#000000".to_string() },
+            base: BaseEffectConfig {
+                mirror: false,
+                flip: false,
+                blur: 1.0,
+                background_color: "#000000".to_string(),
+            },
         }),
     );
 
@@ -165,7 +182,12 @@ pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
             multiplier: 0.5,
             frequency_range: "Mids".to_string(),
             gradient: "linear-gradient(90deg, #ff4e50 0%, #f9d423 100%)".to_string(),
-            base: BaseEffectConfig { mirror: true, flip: false, blur: 0.0, background_color: "#000000".to_string() },
+            base: BaseEffectConfig {
+                mirror: true,
+                flip: false,
+                blur: 0.0,
+                background_color: "#000000".to_string(),
+            },
         }),
     );
 
@@ -176,7 +198,12 @@ pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
             multiplier: 0.7,
             frequency_range: "Lows (beat+bass)".to_string(),
             gradient: "linear-gradient(90deg, #1d976c 0%, #93f9b9 100%)".to_string(),
-            base: BaseEffectConfig { mirror: false, flip: true, blur: 2.0, background_color: "#050505".to_string() },
+            base: BaseEffectConfig {
+                mirror: false,
+                flip: true,
+                blur: 2.0,
+                background_color: "#050505".to_string(),
+            },
         }),
     );
 

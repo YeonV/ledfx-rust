@@ -18,12 +18,24 @@ pub enum FilterbankType {
     BladePlus(BladePlusParams),
 }
 
-fn hz_to_mel(hz: f32) -> f32 { 2595.0 * (1.0 + hz / 700.0).log10() }
-fn mel_to_hz(mel: f32) -> f32 { 700.0 * (10.0f32.powf(mel / 2595.0) - 1.0) }
-fn hz_to_blade(hz: f32) -> f32 { 3700.0 * (1.0 + (hz / 230.0)).log(12.0) }
-fn blade_to_hz(blade: f32) -> f32 { 230.0 * (12.0f32.powf(blade / 3700.0) - 1.0) }
-fn hz_to_vocal(hz: f32) -> f32 { 3340.0 * (1.0 + (hz / 250.0)).log(9.0) }
-fn vocal_to_hz(vocal: f32) -> f32 { 250.0 * (9.0f32.powf(vocal / 3340.0) - 1.0) }
+fn hz_to_mel(hz: f32) -> f32 {
+    2595.0 * (1.0 + hz / 700.0).log10()
+}
+fn mel_to_hz(mel: f32) -> f32 {
+    700.0 * (10.0f32.powf(mel / 2595.0) - 1.0)
+}
+fn hz_to_blade(hz: f32) -> f32 {
+    3700.0 * (1.0 + (hz / 230.0)).log(12.0)
+}
+fn blade_to_hz(blade: f32) -> f32 {
+    230.0 * (12.0f32.powf(blade / 3700.0) - 1.0)
+}
+fn hz_to_vocal(hz: f32) -> f32 {
+    3340.0 * (1.0 + (hz / 250.0)).log(9.0)
+}
+fn vocal_to_hz(vocal: f32) -> f32 {
+    250.0 * (9.0f32.powf(vocal / 3340.0) - 1.0)
+}
 
 pub fn generate_filterbank(
     fft_size: usize,
@@ -70,36 +82,55 @@ pub fn generate_filterbank(
     filters
 }
 
-fn get_hz_points(num_bands: usize, min_freq: f32, max_freq: f32, filter_type: &FilterbankType) -> Vec<f32> {
+fn get_hz_points(
+    num_bands: usize,
+    min_freq: f32,
+    max_freq: f32,
+    filter_type: &FilterbankType,
+) -> Vec<f32> {
     match filter_type {
         FilterbankType::Balanced => {
             let min_mel = hz_to_mel(min_freq);
             let max_mel = hz_to_mel(max_freq);
-            (0..=num_bands + 1).map(|i| min_mel + i as f32 * (max_mel - min_mel) / (num_bands + 1) as f32).map(mel_to_hz).collect()
+            (0..=num_bands + 1)
+                .map(|i| min_mel + i as f32 * (max_mel - min_mel) / (num_bands + 1) as f32)
+                .map(mel_to_hz)
+                .collect()
         }
-        FilterbankType::Precision => {
-            (0..=num_bands + 1).map(|i| min_freq + i as f32 * (max_freq - min_freq) / (num_bands + 1) as f32).collect()
-        }
+        FilterbankType::Precision => (0..=num_bands + 1)
+            .map(|i| min_freq + i as f32 * (max_freq - min_freq) / (num_bands + 1) as f32)
+            .collect(),
         FilterbankType::Blade => {
             let min_blade = hz_to_blade(min_freq);
             let max_blade = hz_to_blade(max_freq);
-            (0..=num_bands + 1).map(|i| min_blade + i as f32 * (max_blade - min_blade) / (num_bands + 1) as f32).map(blade_to_hz).collect()
+            (0..=num_bands + 1)
+                .map(|i| min_blade + i as f32 * (max_blade - min_blade) / (num_bands + 1) as f32)
+                .map(blade_to_hz)
+                .collect()
         }
         FilterbankType::Vocal => {
             let min_vocal = hz_to_vocal(min_freq);
             let max_vocal = hz_to_vocal(max_freq);
-            (0..=num_bands + 1).map(|i| min_vocal + i as f32 * (max_vocal - min_vocal) / (num_bands + 1) as f32).map(vocal_to_hz).collect()
+            (0..=num_bands + 1)
+                .map(|i| min_vocal + i as f32 * (max_vocal - min_vocal) / (num_bands + 1) as f32)
+                .map(vocal_to_hz)
+                .collect()
         }
         FilterbankType::BladePlus(params) => {
-            let hz_to_custom = |hz: f32| params.multiplier * (1.0 + (hz / params.divisor)).log(params.log_base);
-            let custom_to_hz = |custom: f32| params.divisor * (params.log_base.powf(custom / params.multiplier) - 1.0);
+            let hz_to_custom =
+                |hz: f32| params.multiplier * (1.0 + (hz / params.divisor)).log(params.log_base);
+            let custom_to_hz = |custom: f32| {
+                params.divisor * (params.log_base.powf(custom / params.multiplier) - 1.0)
+            };
             let min_custom = hz_to_custom(min_freq);
             let max_custom = hz_to_custom(max_freq);
-            (0..=num_bands + 1).map(|i| min_custom + i as f32 * (max_custom - min_custom) / (num_bands + 1) as f32).map(custom_to_hz).collect()
+            (0..=num_bands + 1)
+                .map(|i| min_custom + i as f32 * (max_custom - min_custom) / (num_bands + 1) as f32)
+                .map(custom_to_hz)
+                .collect()
         }
     }
 }
-
 
 #[tauri::command]
 #[specta::specta]

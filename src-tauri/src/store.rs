@@ -3,14 +3,15 @@ use crate::engine::EffectConfig;
 use crate::presets::EffectPresetMap;
 use crate::types::{Device, Virtual};
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
-use specta::Type;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
-pub struct ScenePreset { // <-- Create a simple struct for the preset data
+pub struct ScenePreset {
+    // <-- Create a simple struct for the preset data
     pub effect_id: String,
     pub preset_name: String,
 }
@@ -40,14 +41,14 @@ pub struct EngineState {
     pub virtuals: HashMap<String, Virtual>,
     #[serde(default)]
     pub dsp_settings: DspSettings,
-    
+
     #[serde(default)]
     pub effect_presets: EffectPresetMap,
 
     // --- START: NEW SCENES FIELD ---
     #[serde(default)]
     pub scenes: HashMap<String, Scene>, // A map of Scene ID to Scene
-    // --- END: NEW SCENES FIELD ---
+                                        // --- END: NEW SCENES FIELD ---
 }
 
 fn get_settings_path(app_handle: &AppHandle) -> PathBuf {

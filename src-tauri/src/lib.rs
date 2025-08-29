@@ -59,8 +59,7 @@ fn configure_builder() -> Builder<tauri::Wry> {
             engine::save_scene,
             engine::delete_scene,
             engine::activate_scene,
-            engine::get_scenes
-            // --- END: NEW SCENE COMMANDS ---
+            engine::get_scenes // --- END: NEW SCENE COMMANDS ---
         ])
         .typ::<types::Device>()
         .typ::<types::Virtual>()
@@ -133,7 +132,7 @@ pub fn run() {
                 engine_command_rx,
                 engine_state_rx,
                 audio_data_state,
-                audio_command_tx_for_engine, 
+                audio_command_tx_for_engine,
                 engine_handle,
             );
         });

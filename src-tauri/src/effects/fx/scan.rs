@@ -4,11 +4,11 @@ use crate::effects::{
     schema::{Control, DefaultValue, EffectSetting},
     BaseEffectConfig, Effect,
 };
+use crate::engine::EffectConfig;
 use crate::utils::colors;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
-use crate::engine::EffectConfig; 
 
 pub const NAME: &str = "Scan";
 
@@ -130,7 +130,6 @@ impl Effect for Scan {
     }
 }
 
-
 use std::collections::HashMap;
 // This function must exist to satisfy the generated code.
 // It can be empty if there are no built-in presets for this effect.
@@ -143,7 +142,12 @@ pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
             speed: 5.0,
             width: 0.15,
             gradient: "linear-gradient(90deg, #ff0000 0%, #330000 50%, #000000 100%)".to_string(),
-            base: BaseEffectConfig { mirror: true, flip: false, blur: 2.0, background_color: "#000000".to_string() },
+            base: BaseEffectConfig {
+                mirror: true,
+                flip: false,
+                blur: 2.0,
+                background_color: "#000000".to_string(),
+            },
         }),
     );
 
@@ -153,7 +157,12 @@ pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
             speed: 2.0,
             width: 0.05,
             gradient: "linear-gradient(90deg, #ff0000 0%, #000000 100%)".to_string(),
-            base: BaseEffectConfig { mirror: true, flip: false, blur: 0.5, background_color: "#110000".to_string() },
+            base: BaseEffectConfig {
+                mirror: true,
+                flip: false,
+                blur: 0.5,
+                background_color: "#110000".to_string(),
+            },
         }),
     );
 
@@ -162,8 +171,15 @@ pub fn get_built_in_presets() -> HashMap<String, EffectConfig> {
         EffectConfig::Scan(ScanConfig {
             speed: 8.0,
             width: 0.5,
-            gradient: "linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff)".to_string(),
-            base: BaseEffectConfig { mirror: false, flip: false, blur: 0.0, background_color: "#000000".to_string() },
+            gradient:
+                "linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff)"
+                    .to_string(),
+            base: BaseEffectConfig {
+                mirror: false,
+                flip: false,
+                blur: 0.0,
+                background_color: "#000000".to_string(),
+            },
         }),
     );
 
