@@ -5,7 +5,7 @@ use crate::audio::shared_processing::build_and_play_stream_shared;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream};
 use dasp::{interpolate::linear::Linear, signal, Signal};
-use dasp_sample::{Sample, ToSample};
+use dasp_sample::Sample;
 use jni::objects::{JByteArray, JClass};
 use jni::sys::jint;
 use jni::JNIEnv;
@@ -220,52 +220,63 @@ pub extern "system" fn Java_com_blade_ledfxrust_AudioVisualizer_onPcmDataCapture
 
     state.audio_samples.extend(mono_samples_iterator);
 
-    while state.audio_samples.len() >= fft_size {
-        for (i, sample) in state.audio_samples.iter().take(fft_size).enumerate() {
-            state.fft_buffer[i] = Complex::new(sample * state.window[i], 0.0);
+    let AudioProcessingState {
+        audio_samples,
+        fft_buffer,
+        window,
+        fft_plan,
+        filterbank,
+        smoothed_melbanks,
+        peak_energy,
+        num_bands,
+        .. // Ignore fft_size as we already have it
+    } = &mut *state;
+
+    while audio_samples.len() >= fft_size {
+        // Now we are borrowing the fields individually, which is safe.
+        for (i, sample) in audio_samples.iter().take(fft_size).enumerate() {
+            fft_buffer[i] = Complex::new(sample * window[i], 0.0);
         }
 
-        state.fft_plan.process(&mut state.fft_buffer);
+        fft_plan.process(fft_buffer);
 
-        let magnitudes: Vec<f32> = state.fft_buffer[0..fft_size / 2]
+        let magnitudes: Vec<f32> = fft_buffer[0..fft_size / 2]
             .iter()
             .map(|c| c.norm_sqr().sqrt())
             .collect();
-        let raw_melbanks: Vec<f32> = state
-            .filterbank
+        let raw_melbanks: Vec<f32> = filterbank
             .iter()
             .map(|filter| filter.iter().map(|&(bin, w)| magnitudes[bin] * w).sum())
             .collect();
 
-        for i in 0..state.num_bands {
-            state.smoothed_melbanks[i] = (state.smoothed_melbanks[i] * settings.smoothing_factor)
+        for i in 0..*num_bands {
+            smoothed_melbanks[i] = (smoothed_melbanks[i] * settings.smoothing_factor)
                 + (raw_melbanks[i] * (1.0 - settings.smoothing_factor));
         }
 
-        let current_max_energy = state
-            .smoothed_melbanks
+        let current_max_energy = smoothed_melbanks
             .iter()
             .fold(0.0f32, |max, &val| val.max(max));
-        if current_max_energy > state.peak_energy {
-            state.peak_energy = state.peak_energy * (1.0 - settings.agc_attack)
+
+        if current_max_energy > *peak_energy {
+            *peak_energy = *peak_energy * (1.0 - settings.agc_attack)
                 + current_max_energy * settings.agc_attack;
         } else {
-            state.peak_energy = state.peak_energy * (1.0 - settings.agc_decay)
-                + current_max_energy * settings.agc_decay;
+            *peak_energy =
+                *peak_energy * (1.0 - settings.agc_decay) + current_max_energy * settings.agc_decay;
         }
-        state.peak_energy = state.peak_energy.max(1e-4);
+        *peak_energy = peak_energy.max(1e-4);
 
-        let final_melbanks: Vec<f32> = state
-            .smoothed_melbanks
+        let final_melbanks: Vec<f32> = smoothed_melbanks
             .iter()
-            .map(|&val| (val / state.peak_energy).min(1.0))
+            .map(|&val| (val / *peak_energy).min(1.0))
             .collect();
 
         if let Ok(mut data) = SHARED_AUDIO_DATA.lock() {
             data.melbanks = final_melbanks;
         }
 
-        state.audio_samples.drain(0..fft_size);
+        audio_samples.drain(0..fft_size);
     }
 }
 
