@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
-import { useFrameStore } from '../../store/frameStore';
-import { commands } from '../../bindings';
+import { useFrameStore } from '../../../store/frameStore';
 
 interface EffectPreviewProps {
   virtualId: string; // Changed from ipAddress

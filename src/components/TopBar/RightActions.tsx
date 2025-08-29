@@ -1,15 +1,15 @@
 import { Box } from '@mui/material';
-import { PlayArrow, Pause, Movie as SceneIcon } from '@mui/icons-material'; // <-- Import Scene icon
+import { PlayArrow, Pause } from '@mui/icons-material';
 import { useStore } from '../../store/useStore';
-import { commands } from '../../bindings';
+import { commands } from '../../lib/rust';
 import { SettingsFab } from '../Settings/SettingsFab';
 import { MelbankVisualizerFab } from '../MelbankVisualizer/MelbankVisualizerFab';
 import { checkEnvironment, isDev } from '../../utils/environment';
 import { useEffect } from 'react';
 import { SettingsActions } from '../Settings/SettingsActions';
 import { IconBtn } from '../base/IconBtn';
-import { ScenesFab } from '../Scenes/ScenesFab'; // <-- Import the new component
-import DevTools from '../DevTools';
+import { ScenesFab } from '../Scenes/ScenesFab';
+import DevTools from '../DevTools/DevTools';
 
 export const RightActions = () => {
   const { playbackState } = useStore();

@@ -1,7 +1,7 @@
 import { memo } from 'react';
-import { Virtual } from '../../bindings';
+import { Virtual } from '../../../lib/rust';
 import { MenuItem, Select } from '@mui/material';
-import { useStore } from '../../store/useStore';
+import { useStore } from '../../../store/useStore';
 
 interface EffectPickerProps {
   virtual: Virtual;

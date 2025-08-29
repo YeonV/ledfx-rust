@@ -1,6 +1,6 @@
 import { useMemo, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { commands, type DspSettings as DspSettingsType, BladePlusParams } from '../../bindings';
+import { commands, type DspSettings as DspSettingsType, BladePlusParams } from '../../lib/rust';
 import { Slider, Typography, Alert, Select, MenuItem, FormControl, InputLabel, Box, Button, Collapse, IconButton, Tooltip } from '@mui/material';
 import { SettingsRow } from './SettingsRow';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';

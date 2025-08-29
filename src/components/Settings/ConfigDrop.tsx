@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
-import { commands } from '../bindings';
-import { useStore } from '../store/useStore';
+import { commands } from '../../lib/rust';
+import { useStore } from '../../store/useStore';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 

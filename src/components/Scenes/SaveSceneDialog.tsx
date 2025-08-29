@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Box, Typography, List, ListItem, ListItemText, Checkbox, FormControl, InputLabel, Select, MenuItem, Divider, ListSubheader } from '@mui/material';
 import { useStore } from '../../store/useStore';
-import { commands, Scene, SceneEffect, EffectConfig } from '../../bindings';
+import { commands, Scene, SceneEffect, EffectConfig } from '../../lib/rust';
 import { deepEqual } from '../../utils/deepEqual';
 
 interface SaveSceneDialogProps {

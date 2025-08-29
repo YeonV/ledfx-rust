@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import type { EffectSetting, PresetCollection } from '../../bindings';
+import type { EffectSetting, PresetCollection } from '../../../lib/rust';
 import { Box, Slider, Typography, FormControl, InputLabel, Select, MenuItem, Stack, Button, Divider } from '@mui/material';
-import GradientPicker from '../base/GradientPicker/GradientPicker';
-import { commands } from '../../bindings';
-import { useStore } from '../../store/useStore';
+import GradientPicker from '../../base/GradientPicker/GradientPicker';
+import { commands } from '../../../lib/rust';
+import { useStore } from '../../../store/useStore';
 import { PresetManager } from './PresetManager';
 
 interface EffectSettingsProps {

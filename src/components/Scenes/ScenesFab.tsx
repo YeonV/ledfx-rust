@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Popover, Typography, List, ListItem, ListItemText, IconButton, Divider, Button, TextField } from '@mui/material';
 import { Collections as SceneIcon, PlayArrow as PlayArrowIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-import { commands } from '../../bindings';
+import { commands } from '../../lib/rust';
 import { useStore } from '../../store/useStore';
 import { IconBtn } from '../base/IconBtn';
 import { SaveSceneDialog } from './SaveSceneDialog';

@@ -5,7 +5,7 @@ import { EffectPreview } from './EffectPreview';
 import { EffectSettings } from './EffectSettings';
 import { Box, Button, Card, CardContent, CardHeader, Collapse, IconButton, Stack, Tooltip } from '@mui/material';
 import { Lightbulb as LightbulbIcon, PlayArrow as PlayArrowIcon, Stop as StopIcon, Edit as EditIcon, Tune as TuneIcon } from '@mui/icons-material';
-import { type EffectSetting, type Virtual } from '../../bindings';
+import { type EffectSetting, type Virtual } from '../../../lib/rust';
 import { EditVirtualDialog } from '../EditVirtualDialog';
 
 interface VirtualCardProps {
