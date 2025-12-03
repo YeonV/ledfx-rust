@@ -67,6 +67,9 @@ jobs:
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       - name: Build the application
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          ENABLE_CODE_SIGNING: ${{ runner.os == 'macOS' && 'true' || 'false' }}
         run: yarn tauri build
 
       - name: Notarize macOS App
@@ -349,8 +352,18 @@ jobs:
         run: yarn tauri ios init
       - name: Configure manual code signing
         run: |
-          # Disable automatic signing in Xcode project
-          sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj
+          # Extract provisioning profile info
+          PROFILE_UUID=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/ | sed 's/.mobileprovision//')
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision))
+
+          echo "Profile UUID: $PROFILE_UUID"
+          echo "Team ID: $TEAM_ID"
+
+          # Modify Xcode project to use manual signing
+          PROJECT_FILE="src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj"
+          sed -i '' "s/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PROJECT_FILE"
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PROJECT_FILE"
+          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = .*/PROVISIONING_PROFILE_SPECIFIER = $PROFILE_UUID;/g" "$PROJECT_FILE"
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
@@ -411,8 +424,18 @@ jobs:
         run: yarn tauri ios init
       - name: Configure manual code signing
         run: |
-          # Disable automatic signing in Xcode project
-          sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj
+          # Extract provisioning profile info
+          PROFILE_UUID=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/ | sed 's/.mobileprovision//')
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision))
+
+          echo "Profile UUID: $PROFILE_UUID"
+          echo "Team ID: $TEAM_ID"
+
+          # Modify Xcode project to use manual signing
+          PROJECT_FILE="src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj"
+          sed -i '' "s/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PROJECT_FILE"
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PROJECT_FILE"
+          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = .*/PROVISIONING_PROFILE_SPECIFIER = $PROFILE_UUID;/g" "$PROJECT_FILE"
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
