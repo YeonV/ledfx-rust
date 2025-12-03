@@ -62,15 +62,12 @@ jobs:
           "
       - name: Install macOS Certificate
         if: runner.os == 'macOS'
-        id: import-macos-cert
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       - name: Build the application
         run: yarn tauri build
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && steps.import-macos-cert.outputs.signing-identity || '' }}
 
       - name: Notarize macOS App
         if: runner.os == 'macOS'
@@ -330,16 +327,21 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
+      - name: Install Apple certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Install provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
       - name: Initialize iOS project
         run: yarn tauri ios init
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
         run: yarn tauri ios build
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          TAURI_APPLE_MOBILE_PROVISION: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -374,16 +376,21 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
+      - name: Install Apple certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Install provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
       - name: Initialize iOS project
         run: yarn tauri ios init
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
         run: yarn tauri ios build --export-method app-store-connect
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          TAURI_APPLE_MOBILE_PROVISION: ${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v3
         with:
