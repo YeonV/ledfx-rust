@@ -334,10 +334,23 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       - name: Install provisioning profile
         run: |
+          # Decode and save provisioning profile
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_PATH"
+
+          # Extract UUID from provisioning profile
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
+          echo "Provisioning profile UUID: $UUID"
+
+          # Copy to correct location with UUID as filename
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
       - name: Initialize iOS project
         run: yarn tauri ios init
+      - name: Configure manual code signing
+        run: |
+          # Disable automatic signing in Xcode project
+          sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
@@ -383,10 +396,23 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       - name: Install provisioning profile
         run: |
+          # Decode and save provisioning profile
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_PATH"
+
+          # Extract UUID from provisioning profile
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
+          echo "Provisioning profile UUID: $UUID"
+
+          # Copy to correct location with UUID as filename
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
       - name: Initialize iOS project
         run: yarn tauri ios init
+      - name: Configure manual code signing
+        run: |
+          # Disable automatic signing in Xcode project
+          sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
