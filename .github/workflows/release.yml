@@ -80,11 +80,22 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_PATH.zip"
 
           # Upload the zip file for notarization and wait for it to complete
-          xcrun notarytool submit "$APP_PATH.zip" \
+          SUBMISSION_ID=$(xcrun notarytool submit "$APP_PATH.zip" \
             --apple-id "${{ secrets.APPLE_ID_USERNAME }}" \
             --password "${{ secrets.APPLE_ID_PASSWORD }}" \
             --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-            --wait
+            --wait \
+            --output-format json | jq -r '.id')
+
+          # Get the notarization log to see why it failed
+          echo "Submission ID: $SUBMISSION_ID"
+          xcrun notarytool log "$SUBMISSION_ID" \
+            --apple-id "${{ secrets.APPLE_ID_USERNAME }}" \
+            --password "${{ secrets.APPLE_ID_PASSWORD }}" \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            notarization-log.json
+
+          cat notarization-log.json
 
           # Staple the notarization ticket to the .app file
           xcrun stapler staple "$APP_PATH"
@@ -230,8 +241,8 @@ jobs:
         run: |
           # 1. Inject permissions into the manifest
           MANIFEST_PATH="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
-          PERMISSIONS='<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
-          sed -i "/<\/manifest>/i \    ${PERMISSIONS}" $MANIFEST_PATH
+          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' $MANIFEST_PATH
+          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.RECORD_AUDIO" />' $MANIFEST_PATH
           echo "--- Patched AndroidManifest.xml ---"
           cat $MANIFEST_PATH
 
@@ -241,10 +252,23 @@ jobs:
           cp android-native/PermissionPlugin.kt $KOTLIN_DEST_PATH/
           echo "--- Copied native Kotlin files ---"
 
-          # 3. Inject the plugin loader into MainActivity.kt
+          # 3. Inject the plugin loader into MainActivity.kt using a heredoc
           MAIN_ACTIVITY_PATH="$KOTLIN_DEST_PATH/MainActivity.kt"
-          PLUGIN_LOADER='    override fun loadPlugin(id: String): app.tauri.plugin.Plugin {\n        return if (id == "permissions") {\n            PermissionPlugin(this)\n        } else {\n            super.loadPlugin(id)\n        }\n    }'
-          sed -i "/class MainActivity : TauriActivity() {/a \    ${PLUGIN_LOADER}" $MAIN_ACTIVITY_PATH
+
+          # Create the plugin override content
+          cat > /tmp/plugin_override.txt << 'EOF'
+              override fun loadPlugin(id: String): app.tauri.plugin.Plugin? {
+                  return if (id == "permissions") {
+                      PermissionPlugin(this)
+                  } else {
+                      super.loadPlugin(id)
+                  }
+              }
+          EOF
+
+          # Insert after the class declaration
+          sed -i '/class MainActivity : TauriActivity() {/r /tmp/plugin_override.txt' $MAIN_ACTIVITY_PATH
+
           echo "--- Patched MainActivity.kt ---"
           cat $MAIN_ACTIVITY_PATH
           echo "---------------------------------"
@@ -304,6 +328,7 @@ jobs:
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
       - name: Install Apple certificate and provisioning profile
+        id: import-certs
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -315,17 +340,72 @@ jobs:
         run: yarn tauri icon
       - name: Build iOS App
         run: yarn tauri ios build
+        env:
+          PROVISIONING_PROFILE: ${{ steps.import-certs.outputs.provisioning-profile-path }}
+          CODE_SIGN_IDENTITY: ${{ steps.import-certs.outputs.code-sign-identity }}
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-artifact
           path: src-tauri/gen/apple/build/release/*.ipa
 
+  build-ios-test:
+    name: Build iOS TestFlight
+    if: startsWith(github.event.head_commit.message, 'Release')
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Add iOS targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Install frontend dependencies (Yarn)
+        run: yarn install --frozen-lockfile
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Sync Version to tauri.conf.json
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const tauriConfPath = './src-tauri/tauri.conf.json';
+            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+            tauriConf.version = packageJson.version;
+            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          "
+      - name: Install Apple certificate and provisioning profile
+        id: import-certs
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          provisioning-profile-base64: ${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}
+      - name: Initialize iOS project
+        run: yarn tauri ios init
+      - name: Generate Icon
+        run: yarn tauri icon
+      - name: Build iOS App
+        run: yarn tauri ios build
+        env:
+          PROVISIONING_PROFILE: ${{ steps.import-certs.outputs.provisioning-profile-path }}
+          CODE_SIGN_IDENTITY: ${{ steps.import-certs.outputs.code-sign-identity }}
+      - name: Upload to TestFlight
+        uses: apple-actions/upload-app-to-app-store@v2
+        with:
+          app-path: 'src-tauri/gen/apple/build/release/ledfx-rust.ipa'
+          key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+
   # --- Create the Release ---
   create-release:
     name: Create Release
     if: always() && startsWith(github.event.head_commit.message, 'Release')
-    needs: [build-desktop, build-rpi-native, build-android, build-ios]
+    needs: [build-desktop, build-rpi-native, build-android, build-ios, build-ios-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
