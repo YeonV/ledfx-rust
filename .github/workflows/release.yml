@@ -17,10 +17,10 @@ jobs:
         include:
           - platform: macos-latest
             pretty_name: MacOS
-          # - platform: windows-latest
-          #   pretty_name: Windows
-          # - platform: ubuntu-22.04
-          #   pretty_name: Linux
+          - platform: windows-latest
+            pretty_name: Windows
+          - platform: ubuntu-22.04
+            pretty_name: Linux
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,17 +66,7 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      - name: Get Signing Identity
-        if: runner.os == 'macOS'
-        run: |
-          # Find the signing identity from the keychain
-          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed -n 's/.*"\(.*\)".*/\1/p')
-          echo "Signing identity: $IDENTITY"
-          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> $GITHUB_ENV
       - name: Build the application
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
-          ENABLE_CODE_SIGNING: ${{ runner.os == 'macOS' && 'true' || 'false' }}
         run: yarn tauri build
 
       - name: Notarize macOS App
@@ -90,22 +80,11 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_PATH.zip"
 
           # Upload the zip file for notarization and wait for it to complete
-          SUBMISSION_ID=$(xcrun notarytool submit "$APP_PATH.zip" \
+          xcrun notarytool submit "$APP_PATH.zip" \
             --apple-id "${{ secrets.APPLE_ID_USERNAME }}" \
             --password "${{ secrets.APPLE_ID_PASSWORD }}" \
             --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-            --wait \
-            --output-format json | jq -r '.id')
-
-          # Get the notarization log to see why it failed
-          echo "Submission ID: $SUBMISSION_ID"
-          xcrun notarytool log "$SUBMISSION_ID" \
-            --apple-id "${{ secrets.APPLE_ID_USERNAME }}" \
-            --password "${{ secrets.APPLE_ID_PASSWORD }}" \
-            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-            notarization-log.json
-
-          cat notarization-log.json
+            --wait
 
           # Staple the notarization ticket to the .app file
           xcrun stapler staple "$APP_PATH"
@@ -136,8 +115,7 @@ jobs:
   # --- RASPBERRY PI BUILD ---
   build-rpi-native:
     name: Build Raspberry Pi
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
@@ -187,8 +165,7 @@ jobs:
   # --- ANDROID BUILD ---
   build-android:
     name: Build Android
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -253,8 +230,8 @@ jobs:
         run: |
           # 1. Inject permissions into the manifest
           MANIFEST_PATH="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
-          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' $MANIFEST_PATH
-          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.RECORD_AUDIO" />' $MANIFEST_PATH
+          PERMISSIONS='<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
+          sed -i "/<\/manifest>/i \    ${PERMISSIONS}" $MANIFEST_PATH
           echo "--- Patched AndroidManifest.xml ---"
           cat $MANIFEST_PATH
 
@@ -264,23 +241,10 @@ jobs:
           cp android-native/PermissionPlugin.kt $KOTLIN_DEST_PATH/
           echo "--- Copied native Kotlin files ---"
 
-          # 3. Inject the plugin loader into MainActivity.kt using a heredoc
+          # 3. Inject the plugin loader into MainActivity.kt
           MAIN_ACTIVITY_PATH="$KOTLIN_DEST_PATH/MainActivity.kt"
-
-          # Create the plugin override content
-          cat > /tmp/plugin_override.txt << 'EOF'
-              override fun loadPlugin(id: String): app.tauri.plugin.Plugin? {
-                  return if (id == "permissions") {
-                      PermissionPlugin(this)
-                  } else {
-                      super.loadPlugin(id)
-                  }
-              }
-          EOF
-
-          # Insert after the class declaration
-          sed -i '/class MainActivity : TauriActivity() {/r /tmp/plugin_override.txt' $MAIN_ACTIVITY_PATH
-
+          PLUGIN_LOADER='    override fun loadPlugin(id: String): app.tauri.plugin.Plugin {\n        return if (id == "permissions") {\n            PermissionPlugin(this)\n        } else {\n            super.loadPlugin(id)\n        }\n    }'
+          sed -i "/class MainActivity : TauriActivity() {/a \    ${PLUGIN_LOADER}" $MAIN_ACTIVITY_PATH
           echo "--- Patched MainActivity.kt ---"
           cat $MAIN_ACTIVITY_PATH
           echo "---------------------------------"
@@ -314,77 +278,54 @@ jobs:
   build-ios:
     name: Build iOS
     if: startsWith(github.event.head_commit.message, 'Release')
-    permissions:
-      contents: write
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: 'yarn'
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios
-      - name: Rust cache
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-      - name: install frontend dependencies
-        run: yarn install --frozen-lockfile
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
-        with:
-          tauriScript: yarn tauri
-          args: --target aarch64-apple-ios
-
-  build-ios-test:
-    name: Build iOS TestFlight
-    if: startsWith(github.event.head_commit.message, 'Release')
-    permissions:
-      contents: write
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: 'yarn'
-      - name: install Rust stable
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-      - name: install frontend dependencies
+      - name: Add iOS targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Install frontend dependencies (Yarn)
         run: yarn install --frozen-lockfile
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}
-          APPLE_ID: ${{ secrets.APPLE_ID_USERNAME }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Install Tauri CLI
+        run: yarn add -D @tauri-apps/cli
+      - name: Sync Version to tauri.conf.json
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const tauriConfPath = './src-tauri/tauri.conf.json';
+            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+            tauriConf.version = packageJson.version;
+            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          "
+      - name: Install Apple certificate and provisioning profile
+        uses: apple-actions/import-codesign-certs@v3
         with:
-          tauriScript: yarn tauri
-          args: --target aarch64-apple-ios
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          provisioning-profile-base64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      - name: Initialize iOS project
+        run: yarn tauri ios init
+      - name: Generate Icon
+        run: yarn tauri icon
+      - name: Build iOS App
+        run: yarn tauri ios build
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-artifact
+          path: src-tauri/gen/apple/build/release/*.ipa
 
   # --- Create the Release ---
   create-release:
     name: Create Release
     if: always() && startsWith(github.event.head_commit.message, 'Release')
-    needs: [build-desktop, build-rpi-native, build-android, build-ios, build-ios-test]
+    needs: [build-desktop, build-rpi-native, build-android, build-ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write
