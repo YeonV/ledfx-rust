@@ -314,160 +314,71 @@ jobs:
   build-ios:
     name: Build iOS
     if: startsWith(github.event.head_commit.message, 'Release')
+    permissions:
+      contents: write
     runs-on: macos-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@v2
-      - name: Install Rust toolchain
+      - uses: actions/checkout@v4
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'yarn'
+      - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
-      - name: Add iOS targets
-        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-      - name: Install frontend dependencies (Yarn)
+        with:
+          targets: aarch64-apple-ios
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - name: install frontend dependencies
         run: yarn install --frozen-lockfile
-      - name: Install Tauri CLI
-        run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to tauri.conf.json
-        shell: bash
-        run: |
-          node -e "
-            const fs = require('fs');
-            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const tauriConfPath = './src-tauri/tauri.conf.json';
-            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
-            tauriConf.version = packageJson.version;
-            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
-          "
-      - name: Install Apple certificate
-        uses: apple-actions/import-codesign-certs@v3
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
         with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      - name: Install provisioning profile
-        run: |
-          # Decode and save provisioning profile
-          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_PATH"
-
-          # Extract UUID from provisioning profile
-          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-          echo "Provisioning profile UUID: $UUID"
-
-          # Copy to correct location with UUID as filename
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
-      - name: Initialize iOS project
-        run: yarn tauri ios init
-      - name: Configure manual code signing
-        run: |
-          # Extract provisioning profile info
-          PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -n 1)
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-
-          echo "Profile UUID: $PROFILE_UUID"
-          echo "Team ID: $TEAM_ID"
-
-          # Use xcodebuild to set manual signing (more reliable than sed)
-          xcodebuild -project src-tauri/gen/apple/ledfx-rust.xcodeproj \
-            -target ledfx-rust_iOS \
-            -showBuildSettings | head -20
-
-          # Set manual code signing in the pbxproj file
-          /usr/libexec/PlistBuddy -c "Set :objects:*:buildSettings:CODE_SIGN_STYLE Manual" \
-            src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj 2>/dev/null || true
-      - name: Generate Icon
-        run: yarn tauri icon
-      - name: Build iOS App
-        run: yarn tauri ios build
-      - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-artifact
-          path: src-tauri/gen/apple/build/arm64/*.ipa
+          tauriScript: yarn tauri
+          args: --target aarch64-apple-ios
 
   build-ios-test:
     name: Build iOS TestFlight
     if: startsWith(github.event.head_commit.message, 'Release')
+    permissions:
+      contents: write
     runs-on: macos-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@v2
-      - name: Install Rust toolchain
+      - uses: actions/checkout@v4
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'yarn'
+      - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
-      - name: Add iOS targets
-        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-      - name: Install frontend dependencies (Yarn)
+        with:
+          targets: aarch64-apple-ios
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - name: install frontend dependencies
         run: yarn install --frozen-lockfile
-      - name: Install Tauri CLI
-        run: yarn add -D @tauri-apps/cli
-      - name: Sync Version to tauri.conf.json
-        shell: bash
-        run: |
-          node -e "
-            const fs = require('fs');
-            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const tauriConfPath = './src-tauri/tauri.conf.json';
-            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
-            tauriConf.version = packageJson.version;
-            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
-          "
-      - name: Install Apple certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      - name: Install provisioning profile
-        run: |
-          # Decode and save provisioning profile
-          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
-          echo "${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_PATH"
-
-          # Extract UUID from provisioning profile
-          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-          echo "Provisioning profile UUID: $UUID"
-
-          # Copy to correct location with UUID as filename
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
-      - name: Initialize iOS project
-        run: yarn tauri ios init
-      - name: Configure manual code signing
-        run: |
-          # Extract provisioning profile info
-          PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -n 1)
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-
-          echo "Profile UUID: $PROFILE_UUID"
-          echo "Team ID: $TEAM_ID"
-
-          # Export for use in build step
-          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
-          echo "TEAM_ID=$TEAM_ID" >> $GITHUB_ENV
-      - name: Generate Icon
-        run: yarn tauri icon
-      - name: Build iOS App
+      - uses: tauri-apps/tauri-action@v0
         env:
-          TAURI_SIGNING_IDENTITY: Apple Distribution
-          TAURI_PROVISIONING_PROFILE: ${{ env.PROFILE_UUID }}
-          DEVELOPMENT_TEAM: ${{ env.TEAM_ID }}
-        run: |
-          # Build with manual signing for App Store
-          yarn tauri ios build --export-method app-store-connect -- \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=$TEAM_ID \
-            PROVISIONING_PROFILE_SPECIFIER=$PROFILE_UUID
-      - name: Upload to TestFlight
-        uses: apple-actions/upload-testflight-build@v3
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}
+          APPLE_ID: ${{ secrets.APPLE_ID_USERNAME }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          app-path: 'src-tauri/gen/apple/build/arm64/ledfx-rust.ipa'
-          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+          tauriScript: yarn tauri
+          args: --target aarch64-apple-ios
 
   # --- Create the Release ---
   create-release:
