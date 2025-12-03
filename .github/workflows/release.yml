@@ -327,22 +327,25 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
-      - name: Install Apple certificate and provisioning profile
-        id: import-certs
+      - name: Download Provisioning Profiles
+        uses: apple-actions/download-provisioning-profiles@v3
+        with:
+          bundle-id: 'com.blade.ledfx-rust'
+          profile-type: 'IOS_APP_DEVELOPMENT'
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+      - name: Install Apple certificate
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          provisioning-profile-base64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
       - name: Initialize iOS project
         run: yarn tauri ios init
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
         run: yarn tauri ios build
-        env:
-          PROVISIONING_PROFILE: ${{ steps.import-certs.outputs.provisioning-profile-path }}
-          CODE_SIGN_IDENTITY: ${{ steps.import-certs.outputs.code-sign-identity }}
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -377,28 +380,31 @@ jobs:
             tauriConf.version = packageJson.version;
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
-      - name: Install Apple certificate and provisioning profile
-        id: import-certs
+      - name: Download Provisioning Profiles
+        uses: apple-actions/download-provisioning-profiles@v3
+        with:
+          bundle-id: 'com.blade.ledfx-rust'
+          profile-type: 'IOS_APP_STORE'
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+      - name: Install Apple certificate
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          provisioning-profile-base64: ${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}
       - name: Initialize iOS project
         run: yarn tauri ios init
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
         run: yarn tauri ios build
-        env:
-          PROVISIONING_PROFILE: ${{ steps.import-certs.outputs.provisioning-profile-path }}
-          CODE_SIGN_IDENTITY: ${{ steps.import-certs.outputs.code-sign-identity }}
       - name: Upload to TestFlight
-        uses: apple-actions/upload-app-to-app-store@v2
+        uses: apple-actions/upload-testflight-build@v3
         with:
           app-path: 'src-tauri/gen/apple/build/release/ledfx-rust.ipa'
-          key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
 
   # --- Create the Release ---
