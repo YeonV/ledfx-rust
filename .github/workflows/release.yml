@@ -17,10 +17,10 @@ jobs:
         include:
           - platform: macos-latest
             pretty_name: MacOS
-          - platform: windows-latest
-            pretty_name: Windows
-          - platform: ubuntu-22.04
-            pretty_name: Linux
+          # - platform: windows-latest
+          #   pretty_name: Windows
+          # - platform: ubuntu-22.04
+          #   pretty_name: Linux
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,9 +66,16 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      - name: Get Signing Identity
+        if: runner.os == 'macOS'
+        run: |
+          # Find the signing identity from the keychain
+          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed -n 's/.*"\(.*\)".*/\1/p')
+          echo "Signing identity: $IDENTITY"
+          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> $GITHUB_ENV
       - name: Build the application
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
           ENABLE_CODE_SIGNING: ${{ runner.os == 'macOS' && 'true' || 'false' }}
         run: yarn tauri build
 
@@ -129,7 +136,8 @@ jobs:
   # --- RASPBERRY PI BUILD ---
   build-rpi-native:
     name: Build Raspberry Pi
-    if: startsWith(github.event.head_commit.message, 'Release')
+    if: false
+    # if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
@@ -179,7 +187,8 @@ jobs:
   # --- ANDROID BUILD ---
   build-android:
     name: Build Android
-    if: startsWith(github.event.head_commit.message, 'Release')
+    if: false
+    # if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -353,17 +362,21 @@ jobs:
       - name: Configure manual code signing
         run: |
           # Extract provisioning profile info
-          PROFILE_UUID=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/ | sed 's/.mobileprovision//')
-          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision))
+          PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -n 1)
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
 
           echo "Profile UUID: $PROFILE_UUID"
           echo "Team ID: $TEAM_ID"
 
-          # Modify Xcode project to use manual signing
-          PROJECT_FILE="src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj"
-          sed -i '' "s/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PROJECT_FILE"
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PROJECT_FILE"
-          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = .*/PROVISIONING_PROFILE_SPECIFIER = $PROFILE_UUID;/g" "$PROJECT_FILE"
+          # Use xcodebuild to set manual signing (more reliable than sed)
+          xcodebuild -project src-tauri/gen/apple/ledfx-rust.xcodeproj \
+            -target ledfx-rust_iOS \
+            -showBuildSettings | head -20
+
+          # Set manual code signing in the pbxproj file
+          /usr/libexec/PlistBuddy -c "Set :objects:*:buildSettings:CODE_SIGN_STYLE Manual" \
+            src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj 2>/dev/null || true
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
@@ -425,21 +438,29 @@ jobs:
       - name: Configure manual code signing
         run: |
           # Extract provisioning profile info
-          PROFILE_UUID=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/ | sed 's/.mobileprovision//')
-          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision))
+          PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -n 1)
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
 
           echo "Profile UUID: $PROFILE_UUID"
           echo "Team ID: $TEAM_ID"
 
-          # Modify Xcode project to use manual signing
-          PROJECT_FILE="src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj"
-          sed -i '' "s/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PROJECT_FILE"
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PROJECT_FILE"
-          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = .*/PROVISIONING_PROFILE_SPECIFIER = $PROFILE_UUID;/g" "$PROJECT_FILE"
+          # Export for use in build step
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          echo "TEAM_ID=$TEAM_ID" >> $GITHUB_ENV
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
-        run: yarn tauri ios build --export-method app-store-connect
+        env:
+          TAURI_SIGNING_IDENTITY: Apple Distribution
+          TAURI_PROVISIONING_PROFILE: ${{ env.PROFILE_UUID }}
+          DEVELOPMENT_TEAM: ${{ env.TEAM_ID }}
+        run: |
+          # Build with manual signing for App Store
+          yarn tauri ios build --export-method app-store-connect -- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=$TEAM_ID \
+            PROVISIONING_PROFILE_SPECIFIER=$PROFILE_UUID
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v3
         with:
