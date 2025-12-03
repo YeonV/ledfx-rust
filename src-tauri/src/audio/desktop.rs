@@ -7,6 +7,7 @@ use std::sync::{mpsc, Arc, Mutex};
 pub fn get_desktop_devices_impl() -> Result<super::AudioDevicesInfo, String> {
     let host = cpal::default_host();
     let mut input_devices: Vec<super::AudioDevice> = Vec::new();
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
     let mut loopback_devices: Vec<super::AudioDevice> = Vec::new();
 
     if let Ok(devices) = host.input_devices() {
