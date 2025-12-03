@@ -843,6 +843,11 @@
     "@types/babel__core" "^7.20.5"
     react-refresh "^0.17.0"
 
+"@yz-dev/react-dynamic-module@^0.1.2":
+  version "0.1.2"
+  resolved "https://registry.yarnpkg.com/@yz-dev/react-dynamic-module/-/react-dynamic-module-0.1.2.tgz#5a416810611f3d540223f70cb5cddc32d39acedc"
+  integrity sha512-GF82BjbCUvX8NE4Ah82AVJ+Q7jNh0QieD+SC142aV+G38NADufQLPoD4Hc+6fyCPRPgxgL1t3/8fBwrMA1mOuA==
+
 ansi-styles@^3.2.1:
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/ansi-styles/-/ansi-styles-3.2.1.tgz#41fbb20243e50b12be0f04b8dedbf07520ce841d"

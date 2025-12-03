@@ -247,26 +247,38 @@ jobs:
   # --- Build for iOS ---
   build-ios:
     name: Build iOS
-    if: false
-    # if: startsWith(github.event.head_commit.message, 'Release')
+    if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Add iOS targets
-        run: rustup target add aarch64-apple-ios x86_64-apple-ios
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
       - name: Install frontend dependencies (Yarn)
         run: yarn install --frozen-lockfile
       - name: Install Tauri CLI
         run: yarn add -D @tauri-apps/cli
+      - name: Sync Version to tauri.conf.json
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const tauriConfPath = './src-tauri/tauri.conf.json';
+            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+            tauriConf.version = packageJson.version;
+            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          "
       - name: Install Apple certificate and provisioning profile
-        # TODO: This is the complex part. You need to add your certs/profiles as secrets.
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          provisioning-profile-base64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
       - name: Build iOS App
         run: yarn tauri ios build
       - name: Upload IPA Artifact
