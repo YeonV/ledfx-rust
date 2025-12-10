@@ -138,17 +138,25 @@ export function Settings() {
 					value={selectedAudioDevice}
 					onChange={handleAudioDeviceChange}
 				>
-					{audioDevices.map((device) => (
+				{audioDevices.map((device) => {
+					const cleanName = device.name.replace('System Audio ', '')
+					const parts = cleanName.split(' (')
+					const mainName = parts[0].replace('(', '')
+					const metadata = parts[1] ? '(' + parts[1].replace('))', ')') : ''
+					
+					return (
 						<MenuItem key={device.name} value={device.name} sx={{ justifyContent: 'space-between', display: 'flex' }}>
 							<Typography variant="body2" pr={2} display={'inline-flex'}>
-								{device.name.startsWith('System Audio') ? '🔊' : '🎤'}{' '}
-								{device.name.replace('System Audio ', '').split(' (')[0].replace('(', '')}
+								{device.name.startsWith('System Audio') ? '🔊' : '🎤'} {mainName}
 							</Typography>
-							<Typography variant="caption" color="text.secondary" display={'inline-flex'}>
-								{'(' + device.name.replace('System Audio ', '').split(' (')[1].replace('))', ')')}
-							</Typography>
+							{metadata && (
+								<Typography variant="caption" color="text.secondary" display={'inline-flex'}>
+									{metadata}
+								</Typography>
+							)}
 						</MenuItem>
-					))}
+					)
+				})}
 				</Select>
 			</SettingsRow>
 

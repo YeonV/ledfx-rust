@@ -239,11 +239,22 @@ jobs:
           cp android-native/PermissionPlugin.kt $KOTLIN_DEST_PATH/
           echo "--- Copied native Kotlin files ---"
 
-          # 3. Inject the plugin loader into MainActivity.kt
+          # 3. Create custom MainActivity.kt with plugin registration
           MAIN_ACTIVITY_PATH="$KOTLIN_DEST_PATH/MainActivity.kt"
-          PLUGIN_LOADER='    override fun loadPlugin(id: String): app.tauri.plugin.Plugin {\n        return if (id == "permissions") {\n            PermissionPlugin(this)\n        } else {\n            super.loadPlugin(id)\n        }\n    }'
-          sed -i "/class MainActivity : TauriActivity() {/a \    ${PLUGIN_LOADER}" $MAIN_ACTIVITY_PATH
-          echo "--- Patched MainActivity.kt ---"
+          cat > $MAIN_ACTIVITY_PATH << 'EOF'
+          package com.blade.ledfx_rust
+          
+          import android.os.Bundle
+          
+          class MainActivity : TauriActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  // Plugin registration is now handled via Tauri's plugin system
+                  // The PermissionsPlugin is available as a standalone class
+              }
+          }
+          EOF
+          echo "--- Created MainActivity.kt ---"
           cat $MAIN_ACTIVITY_PATH
           echo "---------------------------------"
       - name: Generate Icon
@@ -302,22 +313,74 @@ jobs:
             fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
           "
       - name: Install Apple certificate and provisioning profile
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          provisioning-profile-base64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/ios_certificate.p12
+          PP_PATH=$RUNNER_TEMP/profile.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          
+          # Import certificate from secrets
+          echo -n "$APPLE_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          
+          # Import provisioning profile
+          echo -n "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+          
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+          
+          # Get profile UUID
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(/usr/bin/security cms -D -i $PP_PATH))
+          echo "Installed provisioning profile with UUID: $PROFILE_UUID"
+          
+          # Find signing identity
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "iPhone Distribution" | head -1 | grep -o '"[^"]*"' | tr -d '"')
+          if [ -z "$SIGNING_IDENTITY" ]; then
+            SIGNING_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "iPhone Developer" | head -1 | grep -o '"[^"]*"' | tr -d '"')
+          fi
+          if [ -z "$SIGNING_IDENTITY" ]; then
+            SIGNING_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "Apple Development" | head -1 | grep -o '"[^"]*"' | tr -d '"')
+          fi
+          echo "Found signing identity: $SIGNING_IDENTITY"
+          echo "IOS_SIGNING_IDENTITY=$SIGNING_IDENTITY" >> $GITHUB_ENV
+          echo "IOS_PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          
       - name: Initialize iOS project
         run: yarn tauri ios init
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
-        run: yarn tauri ios build
+        run: |
+          # Build with manual code signing
+          yarn tauri ios build --export-method app-store
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_16.4.app
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-artifact
-          path: src-tauri/gen/apple/build/release/*.ipa
+          path: src-tauri/gen/apple/build/arm64/*.ipa
+      - name: Cleanup iOS Code Signing
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm -f $RUNNER_TEMP/ios_certificate.p12 || true
+          rm -rf ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision || true
 
   # --- Create the Release ---
   create-release:
