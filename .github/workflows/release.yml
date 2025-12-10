@@ -19,11 +19,11 @@ jobs:
             pretty_name: MacOS ARM64
             arch: aarch64-apple-darwin
             dmg_suffix: mac-arm64
-          - platform: macos-13
+          - platform: macos-15-intel
             pretty_name: MacOS Universal
             arch: universal-apple-darwin
             dmg_suffix: mac-universal
-          - platform: macos-13
+          - platform: macos-15-intel
             pretty_name: MacOS x86_64
             arch: x86_64-apple-darwin
             dmg_suffix: mac-x64
@@ -425,9 +425,9 @@ jobs:
           "
       - name: Install Apple certificate and provisioning profile
         env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          IOS_CERTIFICATE_BASE64: ${{ secrets.APPLE_DIST_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_DIST_PROVISIONING_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           # Create variables
@@ -436,7 +436,7 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           
           # Import certificate from secrets
-          echo -n "$APPLE_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$IOS_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
           
           # Import provisioning profile
           echo -n "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
@@ -447,7 +447,7 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           
           # Import certificate to keychain
-          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security import $CERTIFICATE_PATH -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           
@@ -474,24 +474,29 @@ jobs:
       - name: Initialize iOS project
         run: yarn tauri ios init
         
-      - name: Configure Xcode project for code signing
+      - name: Configure Xcode project for manual code signing
         run: |
-          # Extract team ID from provisioning profile
+          # Extract team ID and bundle ID from provisioning profile
           PP_PATH=$RUNNER_TEMP/profile.mobileprovision
           TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(/usr/bin/security cms -D -i $PP_PATH))
           echo "Extracted Team ID: $TEAM_ID"
           
-          # Patch the Xcode project to set team ID for automatic signing
+          # Patch the Xcode project for manual signing
           PBXPROJ_PATH="src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj"
-          sed -i '' "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ_PATH"
           
-          echo "--- Patched project.pbxproj with Team ID: $TEAM_ID ---"
+          # Set to manual signing and configure provisioning profile
+          sed -i '' "s/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g" "$PBXPROJ_PATH"
+          sed -i '' "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ_PATH"
+          sed -i '' "s/\"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]\" = \"iPhone Developer\";/\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"$IOS_SIGNING_IDENTITY\";/g" "$PBXPROJ_PATH"
+          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = \"\";/PROVISIONING_PROFILE_SPECIFIER = \"$IOS_PROVISIONING_PROFILE_UUID\";/g" "$PBXPROJ_PATH"
+          
+          echo "--- Configured manual signing with profile: $IOS_PROVISIONING_PROFILE_UUID ---"
           
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
         run: |
-          # Build with automatic code signing
+          # Build with manual code signing
           yarn tauri ios build
         env:
           DEVELOPER_DIR: /Applications/Xcode_16.4.app
