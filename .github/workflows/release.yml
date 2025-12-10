@@ -16,11 +16,23 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            pretty_name: MacOS
+            pretty_name: MacOS ARM64
+            arch: aarch64-apple-darwin
+            dmg_suffix: mac-arm64
+          - platform: macos-13
+            pretty_name: MacOS x86_64
+            arch: x86_64-apple-darwin
+            dmg_suffix: mac-x64
+          - platform: macos-latest
+            pretty_name: MacOS Universal
+            arch: universal-apple-darwin
+            dmg_suffix: mac-universal
           - platform: windows-latest
             pretty_name: Windows
+            dmg_suffix: windows
           - platform: ubuntu-22.04
             pretty_name: Linux
+            dmg_suffix: linux
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -89,26 +101,45 @@ jobs:
           "
           echo "Updated signingIdentity to: $IDENTITY"
       - name: Build the application
-        run: yarn tauri build
+        run: |
+          if [ "${{ matrix.arch }}" == "aarch64-apple-darwin" ]; then
+            yarn tauri build -- --target aarch64-apple-darwin
+          elif [ "${{ matrix.arch }}" == "x86_64-apple-darwin" ]; then
+            yarn tauri build -- --target x86_64-apple-darwin
+          elif [ "${{ matrix.arch }}" == "universal-apple-darwin" ]; then
+            yarn tauri build -- --target universal-apple-darwin
+          else
+            yarn tauri build
+          fi
+        shell: bash
       - name: Rename Artifacts
         shell: bash
         run: |
-          VERSION=${{ steps.get_version.outputs.VERSION }}
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
           if [ "${{ runner.os }}" == "Windows" ]; then
-            mv src-tauri/target/release/bundle/msi/*.msi src-tauri/target/release/bundle/msi/LedFx-rust_${VERSION}_windows.msi
+            mv src-tauri/target/release/bundle/msi/*.msi "src-tauri/target/release/bundle/msi/LedFx-rust_${VERSION}_windows.msi"
           elif [ "${{ runner.os }}" == "Linux" ]; then
-            mv src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/appimage/LedFx-rust_${VERSION}_linux.AppImage
+            mv src-tauri/target/release/bundle/appimage/*.AppImage "src-tauri/target/release/bundle/appimage/LedFx-rust_${VERSION}_linux.AppImage"
           elif [ "${{ runner.os }}" == "macOS" ]; then
-            mv src-tauri/target/release/bundle/dmg/*.dmg src-tauri/target/release/bundle/dmg/LedFx-rust_${VERSION}_mac.dmg
+            # macOS builds are in architecture-specific subdirectories
+            if [ "${{ matrix.arch }}" == "aarch64-apple-darwin" ]; then
+              mv src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/LedFx-rust_${VERSION}_mac-arm64.dmg"
+            elif [ "${{ matrix.arch }}" == "x86_64-apple-darwin" ]; then
+              mv src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg "src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/LedFx-rust_${VERSION}_mac-x64.dmg"
+            elif [ "${{ matrix.arch }}" == "universal-apple-darwin" ]; then
+              mv src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg "src-tauri/target/universal-apple-darwin/release/bundle/dmg/LedFx-rust_${VERSION}_mac-universal.dmg"
+            fi
           fi
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-artifacts-${{ matrix.platform }}
+          name: desktop-artifacts-${{ matrix.platform }}-${{ matrix.dmg_suffix }}
           path: |
             src-tauri/target/release/bundle/msi/LedFx-rust_*.msi
             src-tauri/target/release/bundle/appimage/LedFx-rust_*.AppImage
-            src-tauri/target/release/bundle/dmg/LedFx-rust_*.dmg
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/LedFx-rust_*.dmg
+            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/LedFx-rust_*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/LedFx-rust_*.dmg
 
   # --- RASPBERRY PI BUILD ---
   build-rpi-native:
@@ -162,15 +193,42 @@ jobs:
 
   # --- ANDROID BUILD ---
   build-android:
-    name: Build Android
+    name: Build Android ${{ matrix.arch_name }}
     if: startsWith(github.event.head_commit.message, 'Release')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            arch: arm64-v8a
+            arch_name: ARM64
+          - target: armv7-linux-androideabi
+            arch: armeabi-v7a
+            arch_name: ARMv7
+          - target: i686-linux-android
+            arch: x86
+            arch_name: x86
+          - target: x86_64-linux-android
+            arch: x86_64
+            arch_name: x86_64
+          - target: universal
+            arch: universal
+            arch_name: Universal
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
+        with:
+          key: android-${{ matrix.target }}
       - name: Install Rust toolchain with Android targets
+        if: matrix.target != 'universal'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Rust toolchain with all Android targets
+        if: matrix.target == 'universal'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
@@ -259,26 +317,56 @@ jobs:
           echo "---------------------------------"
       - name: Generate Icon
         run: yarn tauri icon
-      - name: Build Unsigned Android Project
+      - name: Build Android Project (Specific Architecture)
+        if: matrix.target != 'universal'
+        run: yarn tauri android build -- --target ${{ matrix.target }}
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Build Android Project (Universal)
+        if: matrix.target == 'universal'
         run: yarn tauri android build
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      - name: Sign the APK with apksigner
+      - name: Sign the APK with apksigner (Specific Architecture)
+        if: matrix.target != 'universal'
+        run: |
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -r | head -n 1)
+          echo "Using apksigner at: $APKSIGNER"
+          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/app-${{ matrix.arch }}-release-unsigned.apk"
+          $APKSIGNER sign --ks $RUNNER_TEMP/keystore.jks --ks-pass pass:000000 "$APK_PATH"
+      - name: Sign the APK with apksigner (Universal)
+        if: matrix.target == 'universal'
         run: |
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -r | head -n 1)
           echo "Using apksigner at: $APKSIGNER"
           $APKSIGNER sign --ks $RUNNER_TEMP/keystore.jks --ks-pass pass:000000 \
           src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
-      - name: Rename Android Artifacts
+      - name: Rename Android Artifacts (Specific Architecture)
+        if: matrix.target != 'universal'
         run: |
-          # --- MODIFIED: Rename the now-signed APK ---
-          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.apk
-          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android.aab
-      - name: Upload APK and AAB Artifacts
+          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/app-${{ matrix.arch }}-release-unsigned.apk"
+          NEW_NAME="LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android_${{ matrix.arch }}.apk"
+          mv "$APK_PATH" "src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/$NEW_NAME"
+      - name: Rename Android Artifacts (Universal)
+        if: matrix.target == 'universal'
+        run: |
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk \
+             src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android_universal.apk
+          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab \
+             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android_universal.aab
+      - name: Upload APK Artifact (Specific Architecture)
+        if: matrix.target != 'universal'
         uses: actions/upload-artifact@v4
         with:
-          name: android-artifacts
+          name: android-artifact-${{ matrix.arch }}
+          path: src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/LedFx-rust_*.apk
+      - name: Upload APK and AAB Artifacts (Universal)
+        if: matrix.target == 'universal'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-artifact-universal
           path: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/LedFx-rust_*.apk
             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/LedFx-rust_*.aab
@@ -362,6 +450,21 @@ jobs:
           
       - name: Initialize iOS project
         run: yarn tauri ios init
+        
+      - name: Configure Xcode project for code signing
+        run: |
+          # Patch the Xcode project to use manual code signing
+          PBXPROJ_PATH="src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj"
+          
+          # Set manual code signing and provisioning profile
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
+          sed -i '' 's/DEVELOPMENT_TEAM = "";/DEVELOPMENT_TEAM = "";/g' "$PBXPROJ_PATH"
+          
+          # Add provisioning profile UUID and signing identity
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com.blade.ledfx-rust;/PRODUCT_BUNDLE_IDENTIFIER = com.blade.ledfx-rust;\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"$IOS_PROVISIONING_PROFILE_UUID\";\n\t\t\t\tCODE_SIGN_IDENTITY = \"$IOS_SIGNING_IDENTITY\";/g" "$PBXPROJ_PATH"
+          
+          echo "--- Patched project.pbxproj for manual code signing ---"
+          
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
