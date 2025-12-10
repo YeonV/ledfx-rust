@@ -66,32 +66,30 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      - name: Build the application
-        run: yarn tauri build
-
-      - name: Notarize macOS App
+      - name: Setup Apple API Key for Notarization
         if: runner.os == 'macOS'
         run: |
-          # Find the path to the built .app file
-          APP_PATH=$(find src-tauri/target/release/bundle/macos -name "*.app" | head -n 1)
-          echo "Found app at $APP_PATH"
-
-          # Create a zip file for upload
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_PATH.zip"
-
-          # Upload the zip file for notarization and wait for it to complete
-          xcrun notarytool submit "$APP_PATH.zip" \
-            --apple-id "${{ secrets.APPLE_ID_USERNAME }}" \
-            --password "${{ secrets.APPLE_ID_PASSWORD }}" \
-            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-            --wait
-
-          # Staple the notarization ticket to the .app file
-          xcrun stapler staple "$APP_PATH"
-
-          # Staple the ticket to the .dmg file as well
-          DMG_PATH=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" | head -n 1)
-          xcrun stapler staple "$DMG_PATH"
+          # Create the private key file from the secret
+          echo "${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}" > /tmp/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+          echo "APPLE_API_KEY_PATH=/tmp/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8" >> $GITHUB_ENV
+          echo "APPLE_API_ISSUER=${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" >> $GITHUB_ENV
+          echo "APPLE_API_KEY=${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" >> $GITHUB_ENV
+          
+          # Find and set the signing identity dynamically
+          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | grep -o '[A-F0-9]\{40\}')
+          echo "Found signing identity: $IDENTITY"
+          
+          # Update tauri.conf.json with the correct signing identity
+          node -e "
+            const fs = require('fs');
+            const tauriConfPath = './src-tauri/tauri.conf.json';
+            const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+            tauriConf.bundle.macOS.signingIdentity = '$IDENTITY';
+            fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2));
+          "
+          echo "Updated signingIdentity to: $IDENTITY"
+      - name: Build the application
+        run: yarn tauri build
       - name: Rename Artifacts
         shell: bash
         run: |
