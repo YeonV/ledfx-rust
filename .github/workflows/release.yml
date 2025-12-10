@@ -367,7 +367,7 @@ jobs:
       - name: Build iOS App
         run: |
           # Build with manual code signing
-          yarn tauri ios build --export-method app-store
+          yarn tauri ios build --export-method app-store-connect
         env:
           DEVELOPER_DIR: /Applications/Xcode_16.4.app
       - name: Upload IPA Artifact
