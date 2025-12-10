@@ -1,5 +1,5 @@
 {
-  "src-tauri\\src\\effects\\fx\\blade_power.rs": "8591eabf6d8120c3625212c00f83abcf6ce0e3f2b2b4d6ee554791e95a6abf0f",
-  "src-tauri\\src\\effects\\fx\\fire.rs": "259680f7fb116e6d892a6c5ecb8be87fcdf2221c7ec63167d45a1331bf825bcf",
-  "src-tauri\\src\\effects\\fx\\scan.rs": "6286cc3b4569ce2c6a464b9082d838339da516a6339c58e4749659c42e25244c"
+  "src-tauri/src/effects/fx/blade_power.rs": "8591eabf6d8120c3625212c00f83abcf6ce0e3f2b2b4d6ee554791e95a6abf0f",
+  "src-tauri/src/effects/fx/fire.rs": "259680f7fb116e6d892a6c5ecb8be87fcdf2221c7ec63167d45a1331bf825bcf",
+  "src-tauri/src/effects/fx/scan.rs": "6286cc3b4569ce2c6a464b9082d838339da516a6339c58e4749659c42e25244c"
 }
