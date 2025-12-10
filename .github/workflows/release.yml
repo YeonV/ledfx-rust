@@ -43,6 +43,11 @@ jobs:
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Install additional Rust targets for macOS builds
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustup target add x86_64-apple-darwin
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -201,18 +206,23 @@ jobs:
       matrix:
         include:
           - target: aarch64-linux-android
+            tauri_target: aarch64
             arch: arm64-v8a
             arch_name: ARM64
           - target: armv7-linux-androideabi
+            tauri_target: armv7
             arch: armeabi-v7a
             arch_name: ARMv7
           - target: i686-linux-android
+            tauri_target: i686
             arch: x86
             arch_name: x86
           - target: x86_64-linux-android
+            tauri_target: x86_64
             arch: x86_64
             arch_name: x86_64
           - target: universal
+            tauri_target: universal
             arch: universal
             arch_name: Universal
     steps:
@@ -319,7 +329,7 @@ jobs:
         run: yarn tauri icon
       - name: Build Android Project (Specific Architecture)
         if: matrix.target != 'universal'
-        run: yarn tauri android build -- --target ${{ matrix.target }}
+        run: yarn tauri android build -- --target ${{ matrix.tauri_target }}
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
