@@ -20,13 +20,13 @@ jobs:
             arch: aarch64-apple-darwin
             dmg_suffix: mac-arm64
           - platform: macos-13
-            pretty_name: MacOS x86_64
-            arch: x86_64-apple-darwin
-            dmg_suffix: mac-x64
-          - platform: macos-latest
             pretty_name: MacOS Universal
             arch: universal-apple-darwin
             dmg_suffix: mac-universal
+          - platform: macos-13
+            pretty_name: MacOS x86_64
+            arch: x86_64-apple-darwin
+            dmg_suffix: mac-x64
           - platform: windows-latest
             pretty_name: Windows
             dmg_suffix: windows
@@ -344,8 +344,18 @@ jobs:
         run: |
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -r | head -n 1)
           echo "Using apksigner at: $APKSIGNER"
-          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/app-${{ matrix.arch }}-release-unsigned.apk"
-          $APKSIGNER sign --ks $RUNNER_TEMP/keystore.jks --ks-pass pass:000000 "$APK_PATH"
+          
+          # Single-architecture builds also go to universal/release directory
+          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+          echo "Signing APK at: $APK_PATH"
+          
+          if [ -f "$APK_PATH" ]; then
+            $APKSIGNER sign --ks $RUNNER_TEMP/keystore.jks --ks-pass pass:000000 "$APK_PATH"
+          else
+            echo "Error: APK file not found at $APK_PATH"
+            find src-tauri/gen/android/app/build/outputs/apk -type f -name "*.apk"
+            exit 1
+          fi
       - name: Sign the APK with apksigner (Universal)
         if: matrix.target == 'universal'
         run: |
@@ -356,9 +366,12 @@ jobs:
       - name: Rename Android Artifacts (Specific Architecture)
         if: matrix.target != 'universal'
         run: |
-          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/app-${{ matrix.arch }}-release-unsigned.apk"
+          # Find the signed APK
+          APK_FILE=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*-release-unsigned.apk" | head -n 1)
+          APK_DIR=$(dirname "$APK_FILE")
           NEW_NAME="LedFx-rust_${{ steps.get_version.outputs.VERSION }}_android_${{ matrix.arch }}.apk"
-          mv "$APK_PATH" "src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/$NEW_NAME"
+          mv "$APK_FILE" "$APK_DIR/$NEW_NAME"
+          echo "Renamed to: $APK_DIR/$NEW_NAME"
       - name: Rename Android Artifacts (Universal)
         if: matrix.target == 'universal'
         run: |
@@ -371,7 +384,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-artifact-${{ matrix.arch }}
-          path: src-tauri/gen/android/app/build/outputs/apk/${{ matrix.arch }}/release/LedFx-rust_*.apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/LedFx-rust_*.apk
       - name: Upload APK and AAB Artifacts (Universal)
         if: matrix.target == 'universal'
         uses: actions/upload-artifact@v4
@@ -463,24 +476,23 @@ jobs:
         
       - name: Configure Xcode project for code signing
         run: |
-          # Patch the Xcode project to use manual code signing
+          # Extract team ID from provisioning profile
+          PP_PATH=$RUNNER_TEMP/profile.mobileprovision
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /dev/stdin <<< $(/usr/bin/security cms -D -i $PP_PATH))
+          echo "Extracted Team ID: $TEAM_ID"
+          
+          # Patch the Xcode project to set team ID for automatic signing
           PBXPROJ_PATH="src-tauri/gen/apple/ledfx-rust.xcodeproj/project.pbxproj"
+          sed -i '' "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ_PATH"
           
-          # Set manual code signing and provisioning profile
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
-          sed -i '' 's/DEVELOPMENT_TEAM = "";/DEVELOPMENT_TEAM = "";/g' "$PBXPROJ_PATH"
-          
-          # Add provisioning profile UUID and signing identity
-          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com.blade.ledfx-rust;/PRODUCT_BUNDLE_IDENTIFIER = com.blade.ledfx-rust;\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"$IOS_PROVISIONING_PROFILE_UUID\";\n\t\t\t\tCODE_SIGN_IDENTITY = \"$IOS_SIGNING_IDENTITY\";/g" "$PBXPROJ_PATH"
-          
-          echo "--- Patched project.pbxproj for manual code signing ---"
+          echo "--- Patched project.pbxproj with Team ID: $TEAM_ID ---"
           
       - name: Generate Icon
         run: yarn tauri icon
       - name: Build iOS App
         run: |
-          # Build with manual code signing
-          yarn tauri ios build --export-method app-store-connect
+          # Build with automatic code signing
+          yarn tauri ios build
         env:
           DEVELOPER_DIR: /Applications/Xcode_16.4.app
       - name: Upload IPA Artifact
